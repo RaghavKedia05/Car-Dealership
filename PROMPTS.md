@@ -1149,3 +1149,20 @@ At the end, provide:
 10. The key technical decisions I should understand before explaining the project in an interview.
 Begin with repository inspection, then proceed through implementation, testing, debugging, and verification.
 <!-- END VERBATIM USER PROMPT ATTACHMENT -->
+
+---
+
+## Template for unavailable transcript turns
+
+The workspace did not provide the complete historical assistant/user transcript or a public chat URL. If required, add each missing exchange verbatim below; do not replace raw turns with a summary.
+
+```text
+Conversation date/time:
+Public conversation URL (if available):
+
+[User]
+Paste the original user message verbatim.
+
+[Assistant]
+Paste the original assistant response verbatim.
+```
