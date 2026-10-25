@@ -1,4 +1,7 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 const request = require('supertest');
 const { createApp } = require('../backend/app');
@@ -98,6 +101,34 @@ test('registration rejects duplicate emails and malformed input', async (t) => {
   assert.equal(invalid.status, 400);
 });
 
+test('login rejects incorrect credentials and registration cannot grant administrator access', async (t) => {
+  const { app, db, close } = await createTestContext();
+  t.after(close);
+
+  const incorrectPassword = await request(app).post('/api/auth/login').send({
+    email: 'taylor@example.com',
+    password: 'incorrect-password',
+  });
+  const missingAccount = await request(app).post('/api/auth/login').send({
+    email: 'missing@example.com',
+    password: 'incorrect-password',
+  });
+  const attemptedPromotion = await request(app).post('/api/auth/register').send({
+    name: 'Rogue Admin',
+    email: 'rogue@example.com',
+    password: 'correct-horse-battery',
+    role: 'admin',
+  });
+
+  assert.equal(incorrectPassword.status, 401);
+  assert.equal(missingAccount.status, 401);
+  assert.equal(attemptedPromotion.status, 201);
+  assert.equal(
+    db.prepare('SELECT role FROM users WHERE email = ?').get('rogue@example.com').role,
+    'user',
+  );
+});
+
 test('vehicle endpoints require a valid bearer token', async (t) => {
   const { app, close } = await createTestContext();
   t.after(close);
@@ -105,6 +136,19 @@ test('vehicle endpoints require a valid bearer token', async (t) => {
   assert.equal((await request(app).get('/api/vehicles')).status, 401);
   assert.equal((await request(app).get('/api/vehicles/search')).status, 401);
   assert.equal((await request(app).get('/api/vehicles').set(withToken('invalid'))).status, 401);
+});
+
+test('vehicle creation and impossible search ranges reject invalid input', async (t) => {
+  const { app, adminToken, userToken, close } = await createTestContext();
+  t.after(close);
+
+  const invalidVehicle = await addVehicle(app, adminToken, vehicle({ price: 0, quantity: -1 }));
+  const impossibleRange = await request(app)
+    .get('/api/vehicles/search?minPrice=50000&maxPrice=10000')
+    .set(withToken(userToken));
+
+  assert.equal(invalidVehicle.status, 400);
+  assert.equal(impossibleRange.status, 400);
 });
 
 test('admins can create, update, and delete vehicles', async (t) => {
@@ -177,4 +221,24 @@ test('only admins can restock vehicles and invalid quantities are rejected', asy
   assert.equal(invalid.status, 400);
   assert.equal(restocked.status, 200);
   assert.equal(restocked.body.vehicle.quantity, 5);
+});
+
+test('vehicle inventory persists in a file-backed SQLite database', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dealership-db-'));
+  const filename = path.join(directory, 'inventory.sqlite');
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+
+  const firstConnection = createDatabase(filename);
+  firstConnection.prepare(`
+    INSERT INTO vehicles (id, make, model, category, price, quantity)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run('persistent-test-id', 'Volvo', 'XC60', 'SUV', 42000, 3);
+  firstConnection.close();
+
+  const secondConnection = createDatabase(filename);
+  const saved = secondConnection.prepare('SELECT make, model, quantity FROM vehicles WHERE id = ?')
+    .get('persistent-test-id');
+  secondConnection.close();
+
+  assert.deepEqual({ ...saved }, { make: 'Volvo', model: 'XC60', quantity: 3 });
 });
