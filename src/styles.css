@@ -403,6 +403,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   color: #e7edf7;
 }
 
+.skip-link {
+  position: fixed;
+  z-index: 30;
+  top: 8px;
+  left: 8px;
+  padding: 10px 14px;
+  transform: translateY(-160%);
+  border: 2px solid #7eb8ff;
+  border-radius: 6px;
+  background: #0d1727;
+  color: #f3f7fd;
+}
+.skip-link:focus { transform: translateY(0); }
+
 .apex-header {
   position: sticky;
   z-index: 12;
@@ -725,4 +739,62 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .apex-bottom-nav a:hover, .apex-bottom-nav button:hover { color: #79b7ff; }
   .apex-bottom-nav svg { color: #7aa9df; }
   .modal-backdrop { padding: 12px; }
+}
+
+.apex-app .eyebrow { font-size: 10px; }
+.apex-app .api-health, .apex-app .apex-user, .apex-desktop-nav a { font-size: 12px; }
+.apex-desktop-nav a { min-height: 44px; }
+.apex-app .apex-signin, .apex-app .apex-signout { min-height: 42px; font-size: 11px; }
+.apex-app .finder-live-card span, .apex-app .finder-card-specs span, .apex-app .finder-match-label,
+.apex-app .vehicle-stock-indicator, .apex-app .finder-query-heading label { font-size: 9px; }
+.apex-app .finder-live-card small, .apex-app .finder-suggestions button,
+.apex-app .finder-card-specs strong, .apex-app .finder-tradeoffs,
+.apex-app .finder-alternative-copy, .apex-app .compare-select,
+.apex-app .finder-submit-row, .apex-app .finder-secondary,
+.apex-app .finder-card-actions .purchase-button { font-size: 11px; }
+.apex-app .finder-heading > p:last-child, .apex-app .finder-search textarea { font-size: 14px; }
+.apex-app .finder-submit, .apex-app .compare-dock button,
+.apex-app .add-vehicle, .apex-app .sort-order, .apex-app .filter-toggle { min-height: 42px; }
+.apex-app .finder-submit, .apex-app .finder-secondary,
+.apex-app .finder-card-actions .purchase-button, .apex-app .compare-dock button { font-size: 12px; }
+.apex-app .finder-suggestions > span, .apex-app .verification-grid > div span,
+.apex-app .verification-grid > div strong, .apex-app .api-verification summary,
+.apex-app .finder-results-header > span { font-size: 10px; }
+.apex-app .verification-grid > p, .apex-app .comparison-footnote { color: #9aacc2; font-size: 11px; }
+.apex-app .finder-card-make { font-size: 10px; }
+.apex-app .finder-reason { font-size: 12px; }
+.apex-app .finder-card-specs > div { padding: 9px; }
+.apex-app .finder-card-actions .finder-share { width: 42px; height: 42px; }
+.apex-app .search-field, .apex-app .select-field, .apex-app .price-range,
+.apex-app .sort-field, .apex-app .sort-order, .apex-app .add-vehicle { font-size: 11px; }
+.apex-app .search-field input, .apex-app .select-field select,
+.apex-app .price-range input, .apex-app .sort-field select { font-size: 12px; }
+.apex-app .search-field input, .apex-app .select-field select,
+.apex-app .sort-field select { min-height: 34px; }
+.apex-app .price-range input { min-height: 32px; }
+.apex-app .compare-select { min-height: 32px; }
+.apex-app .compare-select input { width: 18px; height: 18px; }
+.apex-app .clear-filters { min-height: 40px; padding: 0 8px; font-size: 11px; }
+.apex-app .notice-error button { min-height: 40px; font-size: 11px; }
+.apex-app .notice-success button { min-width: 40px; min-height: 40px; display: grid; place-items: center; }
+.apex-app .finder-comparison-summary { font-size: 13px; }
+.apex-app .comparison-table { font-size: 12px; }
+.apex-app .comparison-table th, .apex-app .comparison-table td { padding: 12px 10px; line-height: 1.5; }
+.apex-app .collection-meta, .apex-app .inventory-note,
+.apex-app .inventory-pagination, .apex-app .inventory-pagination button { font-size: 11px; }
+.apex-footer { color: #9aacc2; font-size: 10px; }
+.apex-bottom-nav a, .apex-bottom-nav button { min-width: 48px; min-height: 44px; font-size: 10px; }
+
+@media (max-width: 600px) {
+  .apex-app .apex-signin, .apex-app .apex-signout { min-height: 42px; font-size: 10px; }
+  .apex-app .finder-heading > p:last-child { font-size: 13px; }
+  .apex-app .finder-live-card span { font-size: 9px; }
+  .apex-app .finder-live-card small { font-size: 10px; }
+  .apex-app .finder-search textarea { font-size: 16px; }
+  .apex-app .finder-submit-row { font-size: 11px; }
+  .apex-app .finder-suggestions button { font-size: 11px; }
+  .apex-app .compare-dock button { min-height: 42px; font-size: 10px; }
+  .apex-app .compare-dock-copy > strong { font-size: 9px; }
+  .apex-app .collection-meta, .apex-app .inventory-note { font-size: 9px; }
+  .apex-footer { font-size: 9px; }
 }

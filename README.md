@@ -11,6 +11,7 @@ A full-stack dealership inventory app with a Stitch-inspired, responsive React s
 - Give administrators a separate inventory-management experience for adding, editing, and removing vehicles.
 - Search available inventory with the AI Car Finder using natural-language requirements; compare up to three vehicles with explanations grounded in recorded catalog data.
 - Use the Apex Auto navy-and-blue storefront on desktop and mobile, with live API/database readiness and per-request status and timing diagnostics.
+- Navigate the storefront with visible keyboard focus, a skip-to-content link, responsive controls, and keyboard-accessible modal dialogs.
 - Store optional vehicle specifications, while leaving unknown data explicitly unrecorded.
 - Persist users, inventory, and purchase records in a local SQLite database. Passwords are stored as bcrypt hashes.
 - Upgrade database schema with versioned SQL migrations.

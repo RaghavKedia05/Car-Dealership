@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Activity,
@@ -48,6 +48,52 @@ function money(value) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function useDialogAccessibility(dialogRef, onClose, isOpen = true) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const dialog = dialogRef.current;
+    if (!dialog) return undefined;
+    const previouslyFocused = document.activeElement;
+    const focusable = () => [...dialog.querySelectorAll(
+      'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    )];
+    focusable()[0]?.focus();
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const elements = focusable();
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (!first || !last) {
+        event.preventDefault();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) {
+        previouslyFocused.focus();
+      }
+    };
+  }, [isOpen]);
 }
 
 function App() {
@@ -270,6 +316,7 @@ function App() {
 
   return (
     <div className="apex-app">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <header className="apex-header">
         <a className="apex-brand" href="#ai-finder" aria-label="Apex Auto home">
           <span className="apex-brand-mark"><CarFront size={22} strokeWidth={1.8} /></span>
@@ -298,7 +345,7 @@ function App() {
         </div>
       </header>
 
-      <main className="apex-main">
+      <main className="apex-main" id="main-content" tabIndex="-1">
         <AICarFinder
           session={session}
           onPurchase={handlePurchase}
@@ -323,7 +370,7 @@ function App() {
           {session ? (
             <>
               <div className="toolbar">
-                <div className={`filters-panel ${mobileFilters ? 'filters-open' : ''}`}>
+                <div className={`filters-panel ${mobileFilters ? 'filters-open' : ''}`} id="inventory-filters">
                   <label className="search-field">
                     <Search size={17} />
                     <input aria-label="Search make" placeholder="Make — e.g. Volvo" value={make} onChange={(event) => setMake(event.target.value)} />
@@ -340,7 +387,7 @@ function App() {
                     </select>
                     <ChevronDown size={14} />
                   </label>
-                  <div className="price-range">
+                  <div className="price-range" role="group" aria-label="Price range in Indian rupees">
                     <span className="price-prefix">PRICE</span>
                     <input aria-label="Minimum price" inputMode="numeric" placeholder="Min" type="number" min="0" value={minPrice} onChange={(event) => setMinPrice(event.target.value)} />
                     <Minus size={13} />
@@ -365,7 +412,7 @@ function App() {
                   </button>
                   {hasFilters && <button className="clear-filters" type="button" onClick={clearFilters}>Clear</button>}
                 </div>
-                <button className="filter-toggle" type="button" onClick={() => setMobileFilters(!mobileFilters)} aria-expanded={mobileFilters}>
+                <button className="filter-toggle" type="button" onClick={() => setMobileFilters(!mobileFilters)} aria-expanded={mobileFilters} aria-controls="inventory-filters">
                   <SlidersHorizontal size={17} /> Filters
                 </button>
                 {isAdmin && (
@@ -517,6 +564,8 @@ function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) {
   const [searchRequest, setSearchRequest] = useState(null);
   const [compareRequest, setCompareRequest] = useState(null);
   const [shareNotice, setShareNotice] = useState('');
+  const detailsDialogRef = useRef(null);
+  useDialogAccessibility(detailsDialogRef, () => setDetails(null), Boolean(details));
 
   const suggestions = [
     'Family SUV under ₹20 lakh with at least five seats',
@@ -768,6 +817,7 @@ function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) {
         <div className="finder-query-heading"><Sparkles size={18} /><label htmlFor="car-finder-query">DESCRIBE YOUR NEXT CAR</label></div>
         <textarea
           id="car-finder-query"
+          aria-describedby="finder-query-help"
           rows="3"
           maxLength="2000"
           value={query}
@@ -781,7 +831,7 @@ function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) {
           placeholder="e.g. A spacious automatic SUV for family road trips under ₹20 lakh…"
         />
         <div className="finder-submit-row">
-          <span><LockKeyhole size={13} /> {query.length}/2,000 · Your search text only; account and payment details are not used.</span>
+          <span id="finder-query-help"><LockKeyhole size={13} /> {query.length}/2,000 · Your search text only; account and payment details are not used.</span>
           <div>
             {result && <button className="finder-secondary" type="button" onClick={clearSearch}>Clear</button>}
             <button className="finder-submit" type="button" disabled={loading || !session} onClick={() => submit()}>
@@ -875,7 +925,7 @@ function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) {
           <p className="finder-comparison-summary">{comparison.summary}</p>
           <div className="comparison-table-wrap">
             <table className="comparison-table">
-              <thead><tr><th>Specification</th>{comparison.vehicles.map((vehicle) => <th key={vehicle.id}>{vehicle.make} {vehicle.model}</th>)}</tr></thead>
+              <thead><tr><th scope="col">Specification</th>{comparison.vehicles.map((vehicle) => <th scope="col" key={vehicle.id}>{vehicle.make} {vehicle.model}</th>)}</tr></thead>
               <tbody>
                 {comparison.rows.map((row) => (
                   <tr key={row.key}>
@@ -896,7 +946,7 @@ function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) {
 
       {details && (
         <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setDetails(null); }}>
-          <div className="finder-details" role="dialog" aria-modal="true" aria-labelledby="finder-details-title">
+          <div className="finder-details" ref={detailsDialogRef} role="dialog" aria-modal="true" aria-labelledby="finder-details-title" tabIndex="-1">
             <div className="editor-header">
               <p className="eyebrow"><span className="eyebrow-line" /> CURRENT CATALOGUE DATA</p>
               <button className="icon-button" type="button" aria-label="Close vehicle details" onClick={() => setDetails(null)}><X size={19} /></button>
@@ -1041,19 +1091,22 @@ function AuthForm({ mode, setMode, onAuthenticated, setError, error, notice, set
 }
 
 function VehicleEditor({ value, setValue, busy, onSubmit, onClose }) {
+  const dialogRef = useRef(null);
+  useDialogAccessibility(dialogRef, onClose);
+
   function update(field, next) {
     setValue((current) => ({ ...current, [field]: next }));
   }
 
   return (
     <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <form className="vehicle-editor" onSubmit={onSubmit}>
+      <form className="vehicle-editor" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="vehicle-editor-title" onSubmit={onSubmit} tabIndex="-1">
         <div className="editor-header">
           <div className="account-icon"><CarFront size={20} /></div>
           <button className="icon-button" type="button" aria-label="Close form" onClick={onClose}><X size={19} /></button>
         </div>
         <p className="eyebrow"><span className="eyebrow-line" /> APEX AUTO INVENTORY</p>
-        <h3>{value.vehicle ? 'Refine the details.' : 'A new arrival.'}</h3>
+        <h3 id="vehicle-editor-title">{value.vehicle ? 'Refine the details.' : 'A new arrival.'}</h3>
         <p className="editor-description">Thoughtful details make for better drives.</p>
         <div className="editor-grid">
           <label className="form-label">MAKE<input required maxLength="60" value={value.make} onChange={(event) => update('make', event.target.value)} placeholder="Volvo" /></label>
