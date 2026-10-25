@@ -21,6 +21,6 @@ Results from the current implementation session:
 - `npm.cmd run build`: passed.
 - `npm.cmd audit --audit-level=high`: 0 vulnerabilities.
 
-Coverage is a measurement, not a claim that every route or branch is tested. In particular, frontend unit tests, browser end-to-end tests, actual PostgreSQL tests, and production deployment verification are not configured or claimed. Docker is not installed in the current environment, so the image was not rebuilt locally; the GitHub Actions workflow was not rerun for these uncommitted changes.
+Coverage is a measurement, not a claim that every route or branch is tested. In particular, frontend unit tests, browser end-to-end tests, actual PostgreSQL tests, and production deployment verification are not configured or claimed. Docker is not installed in the local environment, so the image was not rebuilt locally. GitHub Actions is configured to run tests, audit, frontend build, Docker build/scan, container smoke/stress tests, and image publishing on pushes to `main`; check the repository Actions page for the current run status.
 
 The API suite covers registration/password hashing, login and role checks, input validation, filters, sorting/pagination, persistent schema migrations, purchase snapshots, no-oversell behavior, restock, historical-delete protection, and file-backed persistence.
