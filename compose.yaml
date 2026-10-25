@@ -1,7 +1,6 @@
 services:
   dealership:
-    build: .
-    image: car-dealership:local
+    image: ghcr.io/raghavkedia05/car-dealership:latest
     restart: unless-stopped
     init: true
     read_only: true
