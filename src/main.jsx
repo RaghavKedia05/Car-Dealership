@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
+  Activity,
   ArrowUpRight,
-  BadgeCheck,
   CarFront,
   Check,
   ChevronDown,
   CircleHelp,
+  Database,
   Gauge,
   KeyRound,
   LockKeyhole,
@@ -14,9 +15,12 @@ import {
   Minus,
   Plus,
   Search,
+  Share2,
   Sparkles,
   ShieldCheck,
   SlidersHorizontal,
+  Terminal,
+  UserRound,
   X,
 } from 'lucide-react';
 import './styles.css';
@@ -66,7 +70,33 @@ function App() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [editor, setEditor] = useState(null);
   const [mobileFilters, setMobileFilters] = useState(false);
+  const [apiStatus, setApiStatus] = useState({ state: 'checking', latency: null });
   const isAdmin = session?.user.role === 'admin';
+
+  useEffect(() => {
+    let active = true;
+    const startedAt = performance.now();
+    fetch('/healthz', { cache: 'no-store' })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Health check returned HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((body) => {
+        if (active) {
+          setApiStatus({
+            state: body.status === 'ok' ? 'online' : 'error',
+            latency: Math.round(performance.now() - startedAt),
+          });
+        }
+      })
+      .catch((requestError) => {
+        if (active) {
+          console.error('Could not verify API and database health:', requestError);
+          setApiStatus({ state: 'error', latency: null });
+        }
+      });
+    return () => { active = false; };
+  }, []);
 
   async function api(url, options = {}) {
     const response = await fetch(url, {
@@ -239,73 +269,48 @@ function App() {
   const hasFilters = make || model || category || minPrice || maxPrice;
 
   return (
-    <div className="min-h-screen bg-canvas text-ink">
-      <header className="site-header">
-        <a className="brand" href="#" aria-label="Northline Motors home">
-          <span className="brand-mark"><CarFront size={21} strokeWidth={1.8} /></span>
-          <span className="brand-name">NORTHLINE<span>MOTORS</span></span>
+    <div className="apex-app">
+      <header className="apex-header">
+        <a className="apex-brand" href="#ai-finder" aria-label="Apex Auto home">
+          <span className="apex-brand-mark"><CarFront size={22} strokeWidth={1.8} /></span>
+          <span>APEX AUTO<small>INVENTORY, IN FOCUS</small></span>
         </a>
-        <nav className="header-nav" aria-label="Main navigation">
-          <a className="nav-link" href="#ai-finder">AI car finder</a>
-          <a className="nav-link active" href="#inventory">The collection</a>
-          <a className="nav-link" href="#about">Our approach</a>
+        <nav className="apex-desktop-nav" aria-label="Showroom">
+          <a href="#ai-finder"><Sparkles size={15} /> Finder</a>
+          <a href="#inventory"><CarFront size={15} /> Inventory</a>
         </nav>
-        {session ? (
-          <div className="header-account">
-            {isAdmin && <span className="admin-indicator"><ShieldCheck size={14} /> ADMIN</span>}
-            <span className="account-name">{session.user.name.split(' ')[0]}</span>
-            <button className="icon-button" type="button" onClick={signOut} aria-label="Sign out" title="Sign out">
-              <LogOut size={18} />
-            </button>
-          </div>
-        ) : (
-          <a className="header-signin" href="#account">Member sign in <ArrowUpRight size={16} /></a>
-        )}
+        <div className="apex-header-actions">
+          <span className={`api-health api-health-${apiStatus.state}`} role="status">
+            <span className="health-dot" />
+            {apiStatus.state === 'checking' ? 'CHECKING API' : apiStatus.state === 'online' ? 'API & DATABASE ONLINE' : 'API STATUS UNKNOWN'}
+          </span>
+          {session ? (
+            <>
+              {isAdmin && <span className="apex-admin-tag"><ShieldCheck size={13} /> ADMIN</span>}
+              <span className="apex-user"><UserRound size={15} /> {session.user.name.split(' ')[0]}</span>
+              <button className="apex-signout" type="button" onClick={signOut} aria-label="Sign out" title="Sign out">
+                <LogOut size={17} />
+              </button>
+            </>
+          ) : (
+            <a className="apex-signin" href="#account">SIGN IN <ArrowUpRight size={15} /></a>
+          )}
+        </div>
       </header>
 
-      <main>
-        <section className="hero" id="about">
-          <div className="hero-copy">
-            <p className="eyebrow"><span className="eyebrow-line" /> A more considered way to drive</p>
-            <h1>Find your<br />next <span>great drive.</span></h1>
-            <p className="hero-description">
-              Explore the current collection, compare the details, and find a vehicle that fits your next chapter.
-            </p>
-            {session ? (
-              <a className="hero-link" href="#ai-finder">Find a car for me <Sparkles size={15} /></a>
-            ) : (
-              <a className="hero-link" href="#account">Discover the collection <ArrowUpRight size={16} /></a>
-            )}
-            <div className="hero-proof">
-              <div className="proof-icon"><BadgeCheck size={17} /></div>
-              <span>A clear view of every listing.</span>
-            </div>
-          </div>
-          <div className="hero-art" aria-label="Illustration of a premium sports car">
-            <div className="hero-glow" />
-            <div className="art-sun" />
-            <span className="art-index">N° 01 <span>THE COLLECTION</span></span>
-            <div className="art-lines" />
-            <CarFront className="hero-car" strokeWidth={0.8} aria-hidden="true" />
-            <div className="art-caption"><span>THE ROAD IS YOURS</span><span>EST. 2014 — NORTHLINE</span></div>
-          </div>
-          <div className="hero-footer">
-            <span>INDEPENDENT BY NATURE</span>
-            <span>YOUR NEXT DRIVE STARTS HERE <ArrowUpRight size={13} /></span>
-          </div>
-        </section>
-
+      <main className="apex-main">
         <AICarFinder
           session={session}
           onPurchase={handlePurchase}
           onUnauthorized={signOut}
+          apiStatus={apiStatus}
         />
 
         <section className="collection-section" id="inventory">
           <div className="section-heading">
             <div>
-              <p className="eyebrow"><span className="eyebrow-line" /> THE NORTHLINE EDIT</p>
-              <h2>Find your <span>fit.</span></h2>
+              <p className="eyebrow"><span className="eyebrow-line" /> LIVE DEALERSHIP INVENTORY</p>
+              <h2>Browse the <span>showroom.</span></h2>
             </div>
             {session && (
               <div className="collection-meta">
@@ -478,25 +483,29 @@ function App() {
           )}
         </section>
 
-        <section className="closing-note">
-          <div className="closing-icon"><Sparkles size={18} /></div>
-          <div><span>NOT JUST A CAR.</span><p>A better feeling about the road ahead.</p></div>
-          <ArrowUpRight size={20} />
-        </section>
       </main>
 
-      <footer className="site-footer">
-        <a className="brand footer-brand" href="#"><span className="brand-mark"><CarFront size={19} /></span><span className="brand-name">NORTHLINE<span>MOTORS</span></span></a>
-        <span>VEHICLE LISTINGS. STOCK TRACKED LIVE.</span>
-        <span>© {new Date().getFullYear()} NORTHLINE MOTORS</span>
+      <footer className="apex-footer">
+        <span>VEHICLE DETAILS ARE SHOWN AS RECORDED IN THE CURRENT CATALOGUE.</span>
+        <span>© {new Date().getFullYear()} APEX AUTO</span>
       </footer>
+
+      <nav className="apex-bottom-nav" aria-label="Showroom navigation">
+        <a href="#ai-finder"><Sparkles size={18} /><span>Finder</span></a>
+        <a href="#inventory"><CarFront size={18} /><span>Inventory</span></a>
+        {session ? (
+          <button type="button" onClick={signOut}><LogOut size={18} /><span>Sign out</span></button>
+        ) : (
+          <a href="#account"><UserRound size={18} /><span>Account</span></a>
+        )}
+      </nav>
 
       {editor && <VehicleEditor value={editor} setValue={setEditor} busy={busyId === 'editor'} onSubmit={saveVehicle} onClose={() => setEditor(null)} />}
     </div>
   );
 }
 
-function AICarFinder({ session, onPurchase, onUnauthorized }) {
+function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) {
   const [query, setQuery] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -505,6 +514,9 @@ function AICarFinder({ session, onPurchase, onUnauthorized }) {
   const [comparison, setComparison] = useState(null);
   const [comparing, setComparing] = useState(false);
   const [details, setDetails] = useState(null);
+  const [searchRequest, setSearchRequest] = useState(null);
+  const [compareRequest, setCompareRequest] = useState(null);
+  const [shareNotice, setShareNotice] = useState('');
 
   const suggestions = [
     'Family SUV under ₹20 lakh with at least five seats',
@@ -526,8 +538,10 @@ function AICarFinder({ session, onPurchase, onUnauthorized }) {
     setQuery(cleanQuery);
     setLoading(true);
     setError('');
+    setShareNotice('');
     setComparison(null);
     setSelectedIds([]);
+    const startedAt = performance.now();
     try {
       const response = await fetch('/api/ai/car-finder', {
         method: 'POST',
@@ -538,6 +552,7 @@ function AICarFinder({ session, onPurchase, onUnauthorized }) {
         body: JSON.stringify({ query: cleanQuery }),
       });
       const body = await response.json();
+      setSearchRequest({ status: response.status, latency: Math.round(performance.now() - startedAt) });
       if (!response.ok) {
         const failure = new Error(body.error || 'Car Finder could not complete this search.');
         failure.status = response.status;
@@ -545,6 +560,9 @@ function AICarFinder({ session, onPurchase, onUnauthorized }) {
       }
       setResult(body);
     } catch (failure) {
+      if (failure.status === undefined) {
+        setSearchRequest({ status: 'network-error', latency: Math.round(performance.now() - startedAt) });
+      }
       setError(failure.message || 'Network error while searching the vehicle inventory.');
       if (failure.status === 401) onUnauthorized();
     } finally {
@@ -575,9 +593,10 @@ function AICarFinder({ session, onPurchase, onUnauthorized }) {
   }
 
   async function compareSelected() {
-    if (!selectedIds.length) return;
+    if (selectedIds.length < 2) return;
     setComparing(true);
     setError('');
+    const startedAt = performance.now();
     try {
       const response = await fetch('/api/ai/car-finder/compare', {
         method: 'POST',
@@ -588,13 +607,20 @@ function AICarFinder({ session, onPurchase, onUnauthorized }) {
         body: JSON.stringify({ vehicle_ids: selectedIds, original_query: query }),
       });
       const body = await response.json();
+      setCompareRequest({ status: response.status, latency: Math.round(performance.now() - startedAt) });
       if (!response.ok) {
         const failure = new Error(body.error || 'The selected vehicles could not be compared.');
         failure.status = response.status;
         throw failure;
       }
       setComparison(body);
+      window.requestAnimationFrame(() => {
+        document.getElementById('comparison')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
     } catch (failure) {
+      if (failure.status === undefined) {
+        setCompareRequest({ status: 'network-error', latency: Math.round(performance.now() - startedAt) });
+      }
       setError(failure.message || 'Network error while comparing vehicles.');
       if (failure.status === 401) onUnauthorized();
     } finally {
@@ -610,39 +636,80 @@ function AICarFinder({ session, onPurchase, onUnauthorized }) {
     setSelectedIds([]);
   }
 
+  async function shareVehicle(vehicle) {
+    const title = `${vehicle.make} ${vehicle.model}`;
+    const text = `${title} · ${money(vehicle.price)} · ${vehicle.quantity} in stock`;
+    setShareNotice('');
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, text, url: `${window.location.origin}/#inventory` });
+        setShareNotice(`${title} shared.`);
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(`${text} — ${window.location.origin}/#inventory`);
+        setError('');
+        setShareNotice('Vehicle details copied to the clipboard.');
+      } else {
+        setError('Sharing is not available in this browser.');
+      }
+    } catch (shareError) {
+      if (shareError.name !== 'AbortError') {
+        setShareNotice('');
+        setError('Could not share this vehicle. Please try again.');
+      }
+    }
+  }
+
+  const selectedVehicles = result
+    ? [...result.matches, ...result.alternatives]
+      .filter((item) => selectedIds.includes(item.vehicle.id))
+      .map((item) => `${item.vehicle.make} ${item.vehicle.model}`)
+    : [];
+
+  function requestLabel(request) {
+    if (!request) return 'NOT CALLED';
+    if (request.status === 'network-error') return 'NETWORK ERROR';
+    return `HTTP ${request.status} · ${request.latency} MS`;
+  }
+
   function recommendationCard(item) {
     const vehicle = item.vehicle;
     const specs = vehicle.specifications || {};
     const isSelected = selectedIds.includes(vehicle.id);
     return (
       <article className="finder-card" key={vehicle.id}>
-        <div className="finder-card-top">
+        <div className="vehicle-art">
+          <div className="vehicle-art-grid" />
           <span className={`finder-match-label ${item.isExactMatch ? 'is-exact' : 'is-alternative'}`}>
-            {item.isExactMatch ? 'MEETS YOUR FILTERS' : `ALTERNATIVE · RELAXED ${item.relaxedConstraint}`}
+            {item.isExactMatch ? 'EXACT MATCH' : `ALTERNATIVE · RELAXED ${item.relaxedConstraint}`}
           </span>
-          <label className="compare-select">
-            <input
-              type="checkbox"
-              checked={isSelected}
-              disabled={!isSelected && selectedIds.length >= 3}
-              onChange={() => toggleSelection(vehicle.id)}
-              aria-label={`Select ${vehicle.make} ${vehicle.model} for comparison`}
-            />
-            Compare
-          </label>
+          <CarFront size={80} strokeWidth={0.9} aria-hidden="true" />
+          <span className={`vehicle-stock-indicator ${vehicle.quantity < 1 ? 'is-sold-out' : ''}`}>
+            <span />{vehicle.quantity > 0 ? `${vehicle.quantity} IN STOCK` : 'OUT OF STOCK'}
+          </span>
         </div>
-        <p className="finder-card-make">{vehicle.make} · {vehicle.category}</p>
-        <h3>{vehicle.model}</h3>
-        <p className="finder-price">{money(vehicle.price)}</p>
-        <p className="finder-stock">
-          {vehicle.quantity > 0 ? `${vehicle.quantity} in stock` : 'Out of stock'}
-          {specs.seatingCapacity ? ` · ${specs.seatingCapacity} seats` : ''}
-          {specs.fuelType ? ` · ${specs.fuelType}` : ''}
-          {specs.transmission ? ` · ${specs.transmission}` : ''}
-        </p>
-        <p className="finder-reason">{item.reasons?.length
-          ? item.reasons.join(' ')
-          : 'Matches the stated vehicle requirements.'}</p>
+        <div className="finder-card-content">
+          <div className="finder-card-title">
+            <div>
+              <p className="finder-card-make">{(vehicle.year || specs.year) ? `${vehicle.year || specs.year} · ` : ''}{vehicle.make} · {vehicle.category}</p>
+              <h3>{vehicle.model}</h3>
+            </div>
+            <p className="finder-price">{money(vehicle.price)}</p>
+          </div>
+          <div className="finder-card-specs">
+            {[
+              ['FUEL', specs.fuelType],
+              ['TRANSMISSION', specs.transmission],
+              ['SEATS', specs.seatingCapacity],
+              ['MILEAGE', specs.mileageKmpl ? `${specs.mileageKmpl} km/l` : null],
+              ['RANGE', specs.electricRangeKm ? `${specs.electricRangeKm} km` : null],
+              ['ENGINE', specs.engineCapacityCc ? `${specs.engineCapacityCc} cc` : null],
+            ].map(([label, value]) => (
+              <div key={label}><span>{label}</span><strong>{value ?? 'Not recorded'}</strong></div>
+            ))}
+          </div>
+          <p className="finder-reason">{item.reasons?.length
+            ? item.reasons.join(' ')
+            : 'Matches the stated vehicle requirements.'}</p>
         {item.tradeOffs?.length > 0 && (
           <ul className="finder-tradeoffs">
             {item.tradeOffs.map((tradeOff) => <li key={tradeOff}>{tradeOff}</li>)}
@@ -651,6 +718,9 @@ function AICarFinder({ session, onPurchase, onUnauthorized }) {
         {item.alternativeExplanation && <p className="finder-alternative-copy">{item.alternativeExplanation}</p>}
         <div className="finder-card-actions">
           <button type="button" className="finder-secondary" onClick={() => setDetails(item)}>View details</button>
+          <button type="button" className="finder-share" onClick={() => shareVehicle(vehicle)} aria-label={`Share ${vehicle.make} ${vehicle.model}`}>
+            <Share2 size={16} />
+          </button>
           <button
             type="button"
             className="purchase-button"
@@ -660,19 +730,42 @@ function AICarFinder({ session, onPurchase, onUnauthorized }) {
             {vehicle.quantity < 1 ? 'Sold out' : 'Purchase'}
           </button>
         </div>
+        <label className="compare-select">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            disabled={!isSelected && selectedIds.length >= 3}
+            onChange={() => toggleSelection(vehicle.id)}
+            aria-label={`Select ${vehicle.make} ${vehicle.model} for comparison`}
+          />
+          Add to comparison
+        </label>
+        </div>
       </article>
     );
   }
 
   return (
     <section className="finder-section" id="ai-finder">
-      <div className="finder-heading">
-        <p className="eyebrow"><span className="eyebrow-line" /> A MORE HUMAN SEARCH</p>
-        <h2>AI Car <span>Finder.</span></h2>
-        <p>Describe what you need. We’ll search the vehicles and specifications actually in this showroom.</p>
+      <div className="finder-topline">
+        <div className="finder-heading">
+          <p className="eyebrow"><span className="eyebrow-line" /> NATURAL LANGUAGE · LIVE INVENTORY</p>
+          <h1>Find the car<br />that fits <span>your life.</span></h1>
+          <p>Describe what matters. We’ll match your needs against vehicles currently in this showroom.</p>
+        </div>
+        <div className="finder-live-card" role="status">
+          <div className={`finder-live-icon ${apiStatus.state}`}><Database size={19} /></div>
+          <div>
+            <span>INVENTORY CONNECTION</span>
+            <strong>{apiStatus.state === 'online' ? 'Database verified' : apiStatus.state === 'checking' ? 'Checking connection' : 'Connection unavailable'}</strong>
+            <small>{apiStatus.state === 'online' && apiStatus.latency !== null
+              ? `Health check · ${apiStatus.latency} ms`
+              : apiStatus.state === 'checking' ? 'Verifying API and database' : 'Search and inventory may be unavailable'}</small>
+          </div>
+        </div>
       </div>
       <div className="finder-search">
-        <label htmlFor="car-finder-query">WHAT SHOULD YOUR NEXT CAR DO?</label>
+        <div className="finder-query-heading"><Sparkles size={18} /><label htmlFor="car-finder-query">DESCRIBE YOUR NEXT CAR</label></div>
         <textarea
           id="car-finder-query"
           rows="3"
@@ -685,14 +778,14 @@ function AICarFinder({ session, onPurchase, onUnauthorized }) {
               submit();
             }
           }}
-          placeholder="Tell us what kind of car you need, your budget, and what matters most…"
+          placeholder="e.g. A spacious automatic SUV for family road trips under ₹20 lakh…"
         />
         <div className="finder-submit-row">
-          <span>Natural-language parsing uses only your search request—not account or payment details.</span>
+          <span><LockKeyhole size={13} /> {query.length}/2,000 · Your search text only; account and payment details are not used.</span>
           <div>
             {result && <button className="finder-secondary" type="button" onClick={clearSearch}>Clear</button>}
             <button className="finder-submit" type="button" disabled={loading || !session} onClick={() => submit()}>
-              {loading ? <><span className="loading-spinner spinner-small" /> Interpreting…</> : <><Sparkles size={15} /> Find my car</>}
+              {loading ? <><span className="loading-spinner spinner-small" /> Searching…</> : <><Sparkles size={15} /> Find vehicles</>}
             </button>
           </div>
         </div>
@@ -700,15 +793,26 @@ function AICarFinder({ session, onPurchase, onUnauthorized }) {
 
       {!session && <p className="finder-auth-note">Sign in to search current inventory and compare vehicles.</p>}
       {error && <div className="notice notice-error finder-notice" role="alert">{error}</div>}
+      {shareNotice && <p className="share-notice" role="status">{shareNotice}</p>}
 
       <div className="finder-suggestions" aria-label="Suggested searches">
-        <span>TRY A SEARCH</span>
+        <span>QUICK SEARCH</span>
         {suggestions.map((suggestion) => (
           <button key={suggestion} type="button" disabled={!session || loading} onClick={() => submit(suggestion)}>
             {suggestion}
           </button>
         ))}
       </div>
+
+      <details className="api-verification">
+        <summary><Terminal size={15} /> API &amp; DATA VERIFICATION <ChevronDown size={15} /></summary>
+        <div className="verification-grid">
+          <div><span><Database size={14} /> API / DATABASE HEALTH</span><strong>{apiStatus.state === 'online' ? `VERIFIED${apiStatus.latency === null ? '' : ` · ${apiStatus.latency} MS`}` : apiStatus.state === 'checking' ? 'CHECKING' : 'UNAVAILABLE'}</strong></div>
+          <div><span><Activity size={14} /> INVENTORY SEARCH</span><strong>{requestLabel(searchRequest)}</strong></div>
+          <div><span><Activity size={14} /> VEHICLE COMPARISON</span><strong>{requestLabel(compareRequest)}</strong></div>
+          <p>Health is verified from the live API. Request timings and HTTP status are measured in this browser; vehicle fields marked “Not recorded” are not present in the catalogue.</p>
+        </div>
+      </details>
 
       {result && (
         <div className="finder-results" aria-live="polite">
@@ -759,19 +863,11 @@ function AICarFinder({ session, onPurchase, onUnauthorized }) {
             </>
           )}
 
-          {(result.matches.length + result.alternatives.length) > 0 && (
-            <div className="finder-compare-bar">
-              <span>{selectedIds.length} of 3 selected · choose at least 2</span>
-              <button type="button" className="finder-submit" disabled={selectedIds.length < 2 || comparing} onClick={compareSelected}>
-                {comparing ? 'Comparing…' : 'Compare selected'}
-              </button>
-            </div>
-          )}
         </div>
       )}
 
       {comparison && (
-        <div className="finder-comparison" aria-live="polite">
+        <div className="finder-comparison" id="comparison" aria-live="polite">
           <div className="finder-results-header">
             <h3>Side-by-side <span>comparison</span></h3>
             <button className="finder-secondary" type="button" onClick={() => setComparison(null)}>Close comparison</button>
@@ -824,6 +920,19 @@ function AICarFinder({ session, onPurchase, onUnauthorized }) {
           </div>
         </div>
       )}
+
+      {selectedIds.length > 0 && (
+        <div className="compare-dock" role="region" aria-label="Vehicle comparison selection">
+          <div className="compare-dock-copy">
+            <span>{selectedIds.length}/3 SELECTED</span>
+            <strong>{selectedVehicles.join(' · ') || 'Select another vehicle to compare'}</strong>
+          </div>
+          <button type="button" disabled={selectedIds.length < 2 || comparing} onClick={compareSelected}>
+            {comparing ? 'Comparing…' : `Compare ${selectedIds.length} vehicles`}
+            <ArrowUpRight size={16} />
+          </button>
+        </div>
+      )}
     </section>
   );
 }
@@ -839,7 +948,7 @@ function VehicleCard({ vehicle, index, isAdmin, busy, onPurchase, onEdit, onDele
         <div className="vehicle-art-number">0{String(index + 1).slice(-1)}</div>
         <div className="vehicle-art-circle" />
         <CarFront className="vehicle-illustration" strokeWidth={0.85} aria-hidden="true" />
-        <span className="vehicle-art-label">NORTHLINE / SELECT</span>
+        <span className="vehicle-art-label">APEX AUTO / LIVE LISTING</span>
       </div>
       <div className="vehicle-details">
         <div className="vehicle-heading">
@@ -943,7 +1052,7 @@ function VehicleEditor({ value, setValue, busy, onSubmit, onClose }) {
           <div className="account-icon"><CarFront size={20} /></div>
           <button className="icon-button" type="button" aria-label="Close form" onClick={onClose}><X size={19} /></button>
         </div>
-        <p className="eyebrow"><span className="eyebrow-line" /> THE NORTHLINE COLLECTION</p>
+        <p className="eyebrow"><span className="eyebrow-line" /> APEX AUTO INVENTORY</p>
         <h3>{value.vehicle ? 'Refine the details.' : 'A new arrival.'}</h3>
         <p className="editor-description">Thoughtful details make for better drives.</p>
         <div className="editor-grid">

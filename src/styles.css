@@ -379,3 +379,350 @@ button { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+:root {
+  font-family: "Segoe UI", Inter, Arial, sans-serif;
+  color: #e7edf7;
+  background: #080e1a;
+  font-feature-settings: normal;
+  font-optical-sizing: auto;
+  scroll-behavior: smooth;
+}
+
+body { min-width: 320px; background: #080e1a; color: #e7edf7; }
+button, input, select, textarea { font: inherit; }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible {
+  outline: 2px solid #54a5ff;
+  outline-offset: 3px;
+}
+
+.apex-app {
+  min-height: 100vh;
+  padding-bottom: 88px;
+  background: radial-gradient(ellipse at 50% -30%, #14243e 0, #080e1a 48rem);
+  color: #e7edf7;
+}
+
+.apex-header {
+  position: sticky;
+  z-index: 12;
+  top: 0;
+  min-height: 70px;
+  padding: 0 max(5%, calc((100% - 1280px) / 2));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid #27364c;
+  background: #080e1af2;
+  backdrop-filter: blur(14px);
+}
+
+.apex-brand { display: flex; align-items: center; gap: 11px; color: #f5f8fe; font-size: 13px; font-weight: 750; letter-spacing: .12em; }
+.apex-brand > span:last-child { display: flex; flex-direction: column; gap: 4px; }
+.apex-brand small { color: #7688a2; font-size: 8px; font-weight: 600; letter-spacing: .18em; }
+.apex-brand-mark { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid #324966; border-radius: 11px; background: #111d2e; color: #64aaff; }
+.apex-desktop-nav { display: flex; align-items: center; gap: 23px; }
+.apex-desktop-nav a { display: inline-flex; align-items: center; gap: 7px; color: #8fa1b8; font-size: 10px; }
+.apex-desktop-nav a:hover { color: #82baff; }
+.apex-desktop-nav svg { color: #639ee0; }
+.apex-header-actions { display: flex; align-items: center; gap: 15px; }
+.api-health { display: inline-flex; align-items: center; gap: 8px; color: #8393aa; font-size: 9px; font-weight: 700; letter-spacing: .09em; }
+.health-dot { width: 7px; height: 7px; border-radius: 50%; background: #e4ad4b; box-shadow: 0 0 12px #e4ad4b88; }
+.api-health-online .health-dot { background: #48d59b; box-shadow: 0 0 12px #48d59b88; }
+.api-health-error .health-dot { background: #ff6e72; box-shadow: 0 0 12px #ff6e7288; }
+.apex-admin-tag, .apex-user { display: inline-flex; align-items: center; gap: 6px; color: #9eacc0; font-size: 10px; }
+.apex-admin-tag { color: #7db5ff; font-size: 8px; font-weight: 700; letter-spacing: .1em; }
+.apex-signin, .apex-signout { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; border: 1px solid #2c405e; border-radius: 8px; background: #111d2e; color: #c8d7ea; font-size: 9px; font-weight: 700; letter-spacing: .08em; cursor: pointer; }
+.apex-signin:hover, .apex-signout:hover { border-color: #54a5ff; color: #fff; }
+
+.apex-main { width: min(100% - 40px, 1180px); margin: 0 auto; }
+.finder-section { padding: 38px 0 52px; border: 0; background: transparent; scroll-margin-top: 90px; }
+.finder-topline { display: flex; align-items: flex-end; justify-content: space-between; gap: 25px; margin-bottom: 26px; }
+.finder-heading { max-width: 650px; }
+.eyebrow { color: #76adf0; font-size: 9px; font-weight: 700; letter-spacing: .15em; }
+.eyebrow-line { background: #3e8fe9; }
+.finder-heading h1 { margin: 13px 0 11px; color: #f1f6fd; font-size: clamp(38px, 5.2vw, 66px); font-weight: 760; letter-spacing: -.055em; line-height: .99; }
+.finder-heading h1 span { color: #58a7ff; }
+.finder-heading > p:last-child { max-width: 525px; color: #8fa0b7; font-size: 13px; line-height: 1.7; }
+.finder-live-card { min-width: 248px; display: flex; align-items: center; gap: 12px; padding: 15px; border: 1px solid #263955; border-radius: 11px; background: #0d1727; }
+.finder-live-icon { width: 38px; height: 38px; display: grid; place-items: center; flex: none; border-radius: 9px; background: #142a44; color: #5daaff; }
+.finder-live-icon.online { background: #102c2b; color: #49d1a0; }
+.finder-live-icon.error { background: #341f2c; color: #ff7880; }
+.finder-live-card > div:last-child { display: flex; flex-direction: column; gap: 4px; }
+.finder-live-card span { color: #778ba6; font-size: 8px; font-weight: 700; letter-spacing: .1em; }
+.finder-live-card strong { color: #dce8f8; font-size: 12px; }
+.finder-live-card small { color: #71839c; font-size: 9px; }
+
+.finder-search { margin: 0; padding: 19px; border: 1px solid #263955; border-radius: 13px; background: linear-gradient(145deg, #111d2e, #0d1727); box-shadow: 0 18px 54px #02071355; }
+.finder-query-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #67adff; }
+.finder-query-heading label { color: #c3d2e5; font-size: 9px; font-weight: 700; letter-spacing: .11em; }
+.finder-search textarea { min-height: 100px; padding: 12px 14px; border: 1px solid #273a55; border-radius: 8px; background: #091322; color: #edf4ff; font-size: 14px; }
+.finder-search textarea::placeholder { color: #62758e; }
+.finder-search textarea:focus { border-color: #468fdf; box-shadow: 0 0 0 3px #3586e51f; }
+.finder-submit-row { align-items: center; margin-top: 13px; color: #788aa3; font-size: 9px; }
+.finder-submit-row > span { display: flex; align-items: center; gap: 6px; }
+.finder-submit-row > span svg { color: #78a4d9; }
+.finder-submit { min-height: 39px; padding: 0 15px; border: 1px solid #438ee8; border-radius: 7px; background: #3685e6; color: white; font-size: 10px; font-weight: 700; }
+.finder-submit:hover:not(:disabled) { background: #56a0fa; }
+.finder-secondary { min-height: 37px; border: 1px solid #304663; border-radius: 7px; background: #111d2e; color: #c2cfe0; }
+.finder-secondary:hover { border-color: #579de9; color: #fff; }
+.finder-auth-note { margin: 14px 0 0; color: #f0bd63; font-size: 11px; }
+.share-notice { margin: 10px 0 0; color: #7edbb3; font-size: 10px; }
+.finder-suggestions { margin-top: 17px; gap: 8px; }
+.finder-suggestions > span { color: #70839c; font-size: 8px; font-weight: 700; letter-spacing: .12em; }
+.finder-suggestions button { min-height: 32px; padding: 0 10px; border: 1px solid #263955; border-radius: 999px; background: #0d1727; color: #a5b6cc; font-size: 9px; }
+.finder-suggestions button:hover:not(:disabled) { border-color: #3989e5; background: #132846; color: #d8eaff; }
+.finder-notice { padding: 11px 13px; border: 1px solid #67363e; border-radius: 8px; background: #2a1822; color: #ffb3b6; }
+.api-verification { margin-top: 17px; border: 1px solid #22344d; border-radius: 9px; background: #0b1422; }
+.api-verification summary { min-height: 40px; padding: 0 13px; display: flex; align-items: center; gap: 8px; color: #879bb5; font-size: 8px; font-weight: 700; letter-spacing: .1em; cursor: pointer; list-style: none; }
+.api-verification summary::-webkit-details-marker { display: none; }
+.api-verification summary svg:first-child { color: #5a9fe9; }
+.api-verification summary svg:last-child { margin-left: auto; transition: transform .2s; }
+.api-verification[open] summary svg:last-child { transform: rotate(180deg); }
+.verification-grid { padding: 0 13px 13px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.verification-grid > div { padding: 10px; border: 1px solid #20324a; border-radius: 7px; background: #0e1a2b; }
+.verification-grid > div span { display: flex; align-items: center; gap: 6px; color: #778ca7; font-size: 7px; font-weight: 700; letter-spacing: .06em; }
+.verification-grid > div span svg { color: #579de9; }
+.verification-grid > div strong { display: block; margin-top: 8px; color: #b7c8df; font-size: 9px; }
+.verification-grid > p { grid-column: 1 / -1; margin: 0; color: #71839b; font-size: 9px; line-height: 1.6; }
+
+.finder-results { margin-top: 31px; }
+.finder-provider-warning { border-left-color: #edb650; border-radius: 0 7px 7px 0; background: #382b17; color: #f0cd8a; }
+.finder-result-summary h3 { color: #e5edf8; font-family: inherit; font-size: 17px; font-weight: 600; line-height: 1.5; }
+.finder-criteria { margin: 17px 0 24px; }
+.finder-criteria > span:first-child { color: #8193ab; }
+.finder-criterion, .finder-preference { border-color: #2b405d; border-radius: 999px; background: #101c2d; color: #b1c3da; }
+.finder-preference { border-color: #40558a; color: #aebdff; }
+.finder-results-header { margin: 27px 0 14px; align-items: flex-end; }
+.finder-results-header h3 { color: #e9f0fa; font-family: inherit; font-size: 16px; font-weight: 700; }
+.finder-results-header h3 span { color: #72aff5; font-family: inherit; font-size: 10px; }
+.finder-results-header > span { color: #7588a2; font-size: 9px; }
+.finder-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.finder-card { overflow: hidden; padding: 0; border: 1px solid #293d59; border-radius: 12px; background: #0e1929; transition: border-color .2s, transform .2s; }
+.finder-card:hover { transform: translateY(-2px); border-color: #3d6593; }
+.vehicle-art { position: relative; height: 154px; display: grid; place-items: center; overflow: hidden; border-bottom: 1px solid #283c57; background: radial-gradient(ellipse at 50% 80%, #23446a 0, #14263d 38%, #0e1929 75%); color: #8bb9e8; }
+.vehicle-art > svg { position: relative; z-index: 1; filter: drop-shadow(0 7px 14px #0008); }
+.vehicle-art-grid { position: absolute; inset: 0; opacity: .23; background-image: linear-gradient(#829db522 1px, transparent 1px), linear-gradient(90deg, #829db522 1px, transparent 1px); background-size: 28px 28px; mask-image: linear-gradient(to bottom, transparent, black); }
+.vehicle-art .finder-match-label { position: absolute; z-index: 2; top: 11px; left: 11px; padding: 6px 8px; border: 1px solid #285b49; border-radius: 4px; background: #0d2c24e8; color: #62dcab; font-size: 7px; font-weight: 700; }
+.vehicle-art .finder-match-label.is-alternative { border-color: #76552b; background: #382915e8; color: #f3c46f; }
+.vehicle-stock-indicator { position: absolute; z-index: 2; right: 10px; bottom: 10px; display: flex; align-items: center; gap: 5px; color: #9eb2c9; font-size: 7px; font-weight: 700; letter-spacing: .07em; }
+.vehicle-stock-indicator > span { width: 6px; height: 6px; border-radius: 50%; background: #51d49c; }
+.vehicle-stock-indicator.is-sold-out > span { background: #ff6e72; }
+.finder-card-content { padding: 14px; }
+.finder-card-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.finder-card-make { margin: 0 0 5px; color: #7fa5d3; font-size: 8px; font-weight: 700; letter-spacing: .09em; }
+.finder-card h3 { color: #e8f0fa; font-family: inherit; font-size: 18px; font-weight: 700; line-height: 1.25; }
+.finder-card-title .finder-price { flex: none; margin: 0; color: #75b4ff; font-family: inherit; font-size: 13px; font-weight: 750; }
+.finder-card-specs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 13px; }
+.finder-card-specs > div { min-width: 0; padding: 8px; border: 1px solid #233650; border-radius: 6px; background: #0b1422; }
+.finder-card-specs span { display: block; color: #71849e; font-size: 7px; font-weight: 700; letter-spacing: .08em; }
+.finder-card-specs strong { display: block; overflow: hidden; margin-top: 5px; color: #bac9dc; font-size: 9px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.finder-reason { min-height: 0; margin-top: 12px; color: #a9bad0; font-size: 10px; }
+.finder-tradeoffs { color: #f2c576; }
+.finder-alternative-copy { color: #e8bd74; }
+.finder-card-actions { align-items: center; margin-top: 12px; padding-top: 11px; border-color: #22344d; }
+.finder-card-actions .finder-secondary { flex: 1; }
+.finder-share { width: 36px; height: 36px; display: grid; flex: none; place-items: center; border: 1px solid #304663; border-radius: 7px; background: transparent; color: #9db2ca; cursor: pointer; }
+.finder-share:hover { border-color: #4d98e8; color: white; }
+.finder-card-actions .purchase-button, .purchase-button { min-height: 36px; padding: 0 12px; border: 1px solid #3888e8; border-radius: 7px; background: #347fda; color: white; font-size: 9px; font-weight: 700; cursor: pointer; }
+.finder-card-actions .purchase-button:hover:not(:disabled), .purchase-button:hover:not(:disabled) { background: #5299ee; }
+.finder-card-actions .purchase-button:disabled, .purchase-button:disabled { border-color: #33435a; background: #1d2a3b; color: #7f8fa4; cursor: not-allowed; }
+.compare-select { margin-top: 11px; color: #879ab2; font-size: 9px; }
+.compare-select input { accent-color: #428fe8; }
+.finder-clarification { border-color: #344765; border-radius: 8px; background: #111e30; color: #bdcde0; line-height: 1.6; }
+.finder-comparison { margin-top: 25px; padding: 17px; border: 1px solid #293e59; border-radius: 11px; background: #0e1929; scroll-margin-top: 90px; }
+.finder-comparison-summary { color: #aabbd0; }
+.comparison-table { min-width: 480px; }
+.comparison-table th, .comparison-table td { border-color: #24374f; color: #bdcadb; }
+.comparison-table thead th { color: #80b8f7; }
+.comparison-table tbody th { color: #7f93ad; }
+.comparison-footnote { color: #788ca5; line-height: 1.6; }
+.finder-details { border-color: #304561; border-radius: 12px; background: #101b2b; }
+.finder-details h3 { color: #e8f1fc; font-family: inherit; font-size: 23px; font-weight: 700; }
+.finder-spec-list > div { border-color: #253850; }
+.finder-spec-list dt { color: #8294ab; }
+.finder-spec-list dd { color: #d5dfec; }
+.finder-detail-note { color: #e8bf78; }
+.compare-dock {
+  position: fixed;
+  z-index: 14;
+  right: 50%;
+  bottom: 84px;
+  width: min(720px, calc(100vw - 32px));
+  min-height: 64px;
+  padding: 10px 12px 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  transform: translateX(50%);
+  border: 1px solid #355477;
+  border-radius: 12px;
+  background: #111e30f5;
+  box-shadow: 0 12px 40px #0009;
+  backdrop-filter: blur(12px);
+}
+.compare-dock-copy { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.compare-dock-copy > span { color: #64aaff; font-size: 8px; font-weight: 700; letter-spacing: .1em; }
+.compare-dock-copy > strong { overflow: hidden; color: #c5d3e5; font-size: 10px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.compare-dock button { min-height: 38px; display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; border: 1px solid #438ee8; border-radius: 7px; background: #3685e6; color: #fff; font-size: 9px; font-weight: 700; cursor: pointer; }
+.compare-dock button:disabled { border-color: #33445c; background: #1d2a3b; color: #7f90a6; cursor: not-allowed; }
+
+.collection-section { margin: 0 0 30px; padding: 34px 0; border: 1px solid #22344d; border-radius: 13px; background: #0c1523; scroll-margin-top: 90px; }
+.collection-section > .section-heading, .collection-section > .toolbar, .collection-section > .notice, .collection-section > .vehicle-grid, .collection-section > .empty-state, .collection-section > .inventory-pagination, .collection-section > .inventory-note, .collection-section > .account-section { margin-left: 22px; margin-right: 22px; }
+.section-heading { margin-bottom: 22px; }
+.section-heading h2 { color: #e6eef9; font-family: inherit; font-size: clamp(25px, 3vw, 35px); font-weight: 700; letter-spacing: -.03em; }
+.section-heading h2 > span { color: #58a7ff; font-style: normal; }
+.collection-meta { color: #8395ad; }
+.inventory-count { color: #64aaff; font-family: inherit; font-size: 18px; font-weight: 700; }
+.toolbar { padding: 9px; border: 1px solid #233650; border-radius: 9px; background: #101b2b; }
+.search-field, .select-field, .price-range, .sort-field, .sort-order { border-color: #293d59; border-radius: 6px; background: #0a1422; color: #92a5be; }
+.search-field input, .select-field select, .price-range input, .sort-field select { color: #dce6f3; }
+.select-field select option { background: #0e1929; }
+.sort-field { color: #8da5c3; }
+.sort-order, .filter-toggle { min-height: 36px; padding: 0 10px; border: 1px solid #2d425e; border-radius: 6px; background: #101d2e; color: #b0c2d9; font-size: 9px; cursor: pointer; }
+.filter-toggle { display: none; }
+.clear-filters { color: #6eafff; }
+.add-vehicle { min-height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid #438ee8; border-radius: 6px; background: #347fda; color: #fff; font-size: 9px; cursor: pointer; }
+.vehicle-grid { gap: 14px; }
+.vehicle-card { overflow: hidden; border: 1px solid #283c57; border-radius: 10px; background: #101b2b; }
+.vehicle-artwork { background: radial-gradient(ellipse at 50% 80%, #23446a 0, #14263d 38%, #0e1929 75%); }
+.vehicle-artwork.artwork-1, .vehicle-artwork.artwork-2, .vehicle-artwork.artwork-3 { background-color: #0e1929; }
+.vehicle-art-circle { border-color: #4784bf44; background: linear-gradient(160deg, #5596d822, transparent 70%); }
+.vehicle-art-label, .vehicle-art-number, .vehicle-stock { color: #93a9c3; }
+.vehicle-details { background: #101b2b; }
+.vehicle-make { color: #76a9df; }
+.vehicle-heading h3 { color: #e7edf7; }
+.category-pill { border-color: #304866; border-radius: 999px; color: #9bb7d8; }
+.vehicle-spec-row { color: #8296b1; }
+.vehicle-price { color: #d9e5f4; }
+.price-caption { color: #71859e; }
+.vehicle-admin-actions { border-color: #263a54; }
+.vehicle-admin-actions button { color: #9eb1c9; }
+.empty-state { border: 1px solid #253850; border-radius: 9px; background: #0f1a2a; color: #92a4bc; }
+.empty-state h3 { color: #dce7f5; }
+.inventory-pagination { color: #8093ab; }
+.inventory-pagination button { border-color: #2b405c; border-radius: 6px; background: #111d2e; color: #c1d0e1; }
+.inventory-note { color: #71859e; }
+.notice { border-radius: 7px; }
+.notice-error { border-color: #663840; background: #2a1822; color: #ffb2b7; }
+.notice-success { border-color: #285342; background: #102820; color: #8ee0b8; }
+.account-section { border-color: #263a55; border-radius: 11px; background: #0f1a2a; }
+.account-intro { border-color: #263a55; background: #0e1929; }
+.account-intro h3, .auth-form h3 { color: #e6eef9; font-family: inherit; font-weight: 700; }
+.account-intro > p:not(.eyebrow), .auth-form > p { color: #93a5bc; }
+.account-benefits { color: #bbc9db; }
+.account-benefits svg { color: #62acff; }
+.auth-form { background: #101b2b; }
+.form-topline, .form-label { color: #8fa2bb; }
+.form-label input, .form-label select { border-color: #2a3e59; border-radius: 6px; background: #091322; color: #e4edf8; }
+.form-label input:focus, .form-label select:focus { border-color: #438ee8; }
+.auth-submit { border-color: #438ee8; border-radius: 7px; background: #3685e6; color: #fff; }
+.auth-submit:hover:not(:disabled) { border-color: #65adff; background: #5299ee; }
+.auth-switch { color: #899bb2; }
+.auth-switch button { color: #75b4ff; }
+.form-secure { color: #72869f; }
+.form-error { color: #ffb0b4; }
+.form-success { color: #8ee0b8; }
+.apex-footer { min-height: 57px; width: min(100% - 40px, 1180px); margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #60738d; font-size: 8px; letter-spacing: .07em; }
+.apex-bottom-nav { display: none; }
+
+@media (max-width: 900px) {
+  .apex-header { padding: 0 22px; }
+  .apex-main, .apex-footer { width: min(100% - 32px, 1180px); }
+  .finder-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .collection-section { padding: 25px 0; }
+  .collection-section > .section-heading, .collection-section > .toolbar, .collection-section > .notice, .collection-section > .vehicle-grid, .collection-section > .empty-state, .collection-section > .inventory-pagination, .collection-section > .inventory-note, .collection-section > .account-section { margin-left: 16px; margin-right: 16px; }
+}
+
+@media (max-width: 600px) {
+  .apex-app { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .apex-header { min-height: 61px; padding: 0 15px; }
+  .apex-brand { gap: 8px; font-size: 11px; }
+  .apex-brand-mark { width: 33px; height: 33px; }
+  .apex-brand small { font-size: 7px; }
+  .apex-desktop-nav { display: none; }
+  .apex-header-actions { gap: 9px; }
+  .api-health { font-size: 0; }
+  .health-dot { width: 8px; height: 8px; }
+  .apex-admin-tag { font-size: 7px; }
+  .apex-user { display: none; }
+  .apex-signin, .apex-signout { min-height: 33px; padding: 0 9px; font-size: 8px; }
+  .apex-main, .apex-footer { width: calc(100% - 28px); }
+  .finder-section { padding: 27px 0 35px; }
+  .finder-topline { align-items: flex-start; flex-direction: column; gap: 17px; margin-bottom: 17px; }
+  .finder-heading h1 { font-size: clamp(38px, 12vw, 54px); }
+  .finder-heading > p:last-child { font-size: 11px; }
+  .finder-live-card { min-width: 0; width: 100%; padding: 10px 12px; }
+  .finder-live-icon { width: 33px; height: 33px; }
+  .finder-search { padding: 12px; border-radius: 10px; }
+  .finder-search textarea { min-height: 90px; font-size: 12px; }
+  .finder-submit-row { align-items: stretch; flex-direction: column; gap: 10px; }
+  .finder-submit-row > span { align-items: flex-start; line-height: 1.5; }
+  .finder-submit-row > div { width: 100%; }
+  .finder-submit-row .finder-submit { flex: 1; }
+  .finder-suggestions { align-items: flex-start; flex-direction: row; }
+  .finder-suggestions > span { flex: 0 0 100%; }
+  .finder-suggestions button { min-height: 31px; text-align: left; }
+  .verification-grid { grid-template-columns: 1fr; }
+  .verification-grid > p { grid-column: auto; }
+  .finder-result-summary h3 { font-size: 15px; }
+  .finder-results-header { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .finder-grid { grid-template-columns: 1fr; }
+  .vehicle-art { height: 145px; }
+  .finder-comparison { padding: 12px; }
+  .finder-comparison .finder-results-header { flex-direction: row; align-items: center; }
+  .comparison-table th, .comparison-table td { min-width: 108px; padding: 8px; }
+  .compare-dock { bottom: calc(76px + env(safe-area-inset-bottom)); min-height: 59px; padding: 8px; gap: 8px; }
+  .compare-dock-copy > strong { max-width: 48vw; font-size: 8px; }
+  .compare-dock button { min-height: 36px; padding: 0 8px; font-size: 8px; }
+  .collection-section { margin-bottom: 18px; padding: 20px 0; }
+  .collection-section > .section-heading, .collection-section > .toolbar, .collection-section > .notice, .collection-section > .vehicle-grid, .collection-section > .empty-state, .collection-section > .inventory-pagination, .collection-section > .inventory-note, .collection-section > .account-section { margin-left: 11px; margin-right: 11px; }
+  .section-heading { align-items: flex-end; gap: 8px; }
+  .section-heading h2 { font-size: 24px; }
+  .collection-meta { gap: 5px; font-size: 6px; }
+  .inventory-count { font-size: 15px; }
+  .toolbar { position: relative; flex-wrap: wrap; gap: 7px; padding: 7px; }
+  .filter-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+  .filters-panel { display: none; order: 3; width: 100%; }
+  .filters-panel.filters-open { display: flex; }
+  .search-field { flex: 1 1 calc(50% - 5px); }
+  .select-field, .price-range, .sort-field, .sort-order { flex: 1 1 calc(50% - 5px); }
+  .price-range { gap: 5px; }
+  .price-range input { width: 42px; }
+  .sort-field select { max-width: none; flex: 1; }
+  .add-vehicle { flex: 1; }
+  .vehicle-grid { grid-template-columns: 1fr; }
+  .vehicle-artwork { height: 155px; }
+  .vehicle-illustration { height: 115px; }
+  .vehicle-details { padding: 13px; }
+  .account-section { grid-template-columns: 1fr; }
+  .account-intro { padding: 22px 7%; border-right: 0; border-bottom: 1px solid #263a55; }
+  .account-intro h3 { font-size: 27px; }
+  .account-benefits { flex-direction: row; flex-wrap: wrap; gap: 8px 12px; }
+  .account-benefits li { font-size: 9px; }
+  .auth-form { padding: 22px 7%; }
+  .inventory-pagination { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .inventory-pagination > div { width: 100%; justify-content: space-between; }
+  .apex-footer { align-items: flex-start; flex-direction: column; justify-content: center; padding: 13px 0; font-size: 7px; }
+  .apex-bottom-nav {
+    position: fixed;
+    z-index: 16;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    min-height: calc(62px + env(safe-area-inset-bottom));
+    padding: 6px 16px env(safe-area-inset-bottom);
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    border-top: 1px solid #26384f;
+    background: #0b1422f5;
+    backdrop-filter: blur(12px);
+  }
+  .apex-bottom-nav a, .apex-bottom-nav button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 0; background: transparent; color: #8296b0; font-size: 8px; cursor: pointer; }
+  .apex-bottom-nav a:hover, .apex-bottom-nav button:hover { color: #79b7ff; }
+  .apex-bottom-nav svg { color: #7aa9df; }
+  .modal-backdrop { padding: 12px; }
+}

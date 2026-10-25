@@ -10,6 +10,7 @@ module.exports = defineConfig({
     },
     proxy: {
       '/api': 'http://localhost:3001',
+      '/healthz': 'http://localhost:3001',
     },
   },
 });

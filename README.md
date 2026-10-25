@@ -1,6 +1,6 @@
-# Northline Motors — Car Dealership Inventory
+# Apex Auto — Car Dealership Inventory
 
-A full-stack dealership inventory app with a responsive React storefront, an authenticated REST API, and a persistent SQLite database. Shoppers can browse and filter vehicles and purchase available stock; administrators can maintain the catalog.
+A full-stack dealership inventory app with a Stitch-inspired, responsive React storefront, an authenticated REST API, and a persistent SQLite database. Shoppers can browse and filter vehicles and purchase available stock; administrators can maintain the catalog.
 
 ## Features
 
@@ -10,6 +10,7 @@ A full-stack dealership inventory app with a responsive React storefront, an aut
 - Purchase a vehicle with an atomic stock decrement and a historical unit-price snapshot; vehicles at zero stock cannot be purchased.
 - Give administrators a separate inventory-management experience for adding, editing, and removing vehicles.
 - Search available inventory with the AI Car Finder using natural-language requirements; compare up to three vehicles with explanations grounded in recorded catalog data.
+- Use the Apex Auto navy-and-blue storefront on desktop and mobile, with live API/database readiness and per-request status and timing diagnostics.
 - Store optional vehicle specifications, while leaving unknown data explicitly unrecorded.
 - Persist users, inventory, and purchase records in a local SQLite database. Passwords are stored as bcrypt hashes.
 - Upgrade database schema with versioned SQL migrations.
@@ -36,9 +37,9 @@ $env:JWT_SECRET = "replace-this-with-a-long-random-secret"
 npm.cmd run dev
 ```
 
-The React app is at `http://localhost:5173`; its `/api` requests are proxied to the API at `http://localhost:3001`. When using a shell where `npm` works directly, the `.cmd` suffix is optional.
+The React app is at `http://localhost:5173`; its `/api` requests and `/healthz` readiness check are proxied to the API at `http://localhost:3001`. When using a shell where `npm` works directly, the `.cmd` suffix is optional.
 
-The default persistent database is `data\dealership.db`; the API applies versioned migrations at startup. To select a different database file, set `DATABASE_PATH` before starting the API. Migration scripts live in `backend\migrations`; SQLite's `user_version` records the applied schema version.
+The default persistent database is `data\dealership.db`; the API applies versioned migrations at startup. To select a different database file, set `DATABASE_PATH` before starting the API. Migration scripts live in `backend\migrations`; SQLite's `user_version` records the applied schema version. No sample vehicles are seeded automatically; add verified dealership inventory through the administrator account rather than displaying fictional records as live stock.
 
 ### Create the first administrator
 
@@ -130,7 +131,7 @@ This remains the established Node/Express + React + SQLite application rather th
 
 ## Screenshots
 
-The screenshots below were captured from the running application:
+The screenshots below document the previous Northline visual theme. The current storefront uses Apex Auto branding and a navy-and-blue responsive design; the underlying login, inventory, and administrator workflows remain the same.
 
 ![Northline Motors inventory dashboard with administrator controls](screenshots/inventory-dashboard.png)
 
@@ -167,7 +168,7 @@ The development history starts with the API behavior tests, recorded while the A
 
 I used GitHub Copilot through an AI assistant using Copilot SDK in VS Code for implementation, test development, debugging, and documentation. This update adds the natural-language car finder, grounded recommendations and comparisons, optional vehicle specifications, and the one-time USD-to-INR data migration.
 
-The assistant executed the 33-test suite with coverage, production frontend build, dependency audit, and a browser smoke check of admin sign-in, vehicle specification entry, INR formatting, finder results, and comparisons against a temporary database. These are tool-executed checks, not a claim that I personally performed an independent review. Before using this for an assignment, I should add the specific code-review and interview-preparation work I personally completed.
+The assistant executed the 34-test suite, production frontend build, and a browser smoke check of admin sign-in, vehicle specification entry, INR formatting, live API health, natural-language inventory results, and vehicle comparison against an isolated temporary database. These are tool-executed checks, not a claim that I personally performed an independent review. Before using this for an assignment, I should add the specific code-review and interview-preparation work I personally completed.
 
 [`PROMPTS.md`](PROMPTS.md) preserves the original project brief and earlier supplied prompt. The later AI Car Finder request is not included because its original attachment text was not available in this implementation context; prior assistant responses and chat turns are not reconstructed.
 
