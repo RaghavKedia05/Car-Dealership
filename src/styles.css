@@ -1074,3 +1074,41 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .admin-enquiry-filters .public-button { flex: 0 0 auto; }
   .admin-enquiry-table { min-width: 780px; }
 }
+
+.global-error-toast {
+  position: fixed;
+  z-index: 100;
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  width: min(440px, calc(100vw - 32px));
+  min-height: 58px;
+  padding: 14px 15px;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  border: 1px solid #b85f68;
+  border-radius: 9px;
+  background: #2b1720;
+  color: #ffd9dc;
+  box-shadow: 0 14px 40px #0008;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.global-error-toast > svg { flex: none; margin-top: 1px; color: #ff969e; }
+.global-error-toast > span { flex: 1; }
+.global-error-toast button {
+  flex: none;
+  min-width: 32px;
+  min-height: 32px;
+  margin: -5px -6px 0 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.global-error-toast button:hover { background: #ffffff14; }
+.global-error-toast button:focus-visible { outline: 2px solid #ffb2b7; outline-offset: 2px; }

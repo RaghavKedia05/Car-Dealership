@@ -27,6 +27,45 @@ import './styles.css';
 
 const CATEGORIES = ['SUV', 'Sedan', 'Truck', 'Coupe', 'Hatchback', 'Wagon', 'Van', 'Electric', 'Other'];
 
+function reportError(error) {
+  const message = error instanceof TypeError
+    ? 'Could not connect to the dealership server. Check your internet connection and make sure the API service is running.'
+    : error.message || 'Something went wrong. Please try again.';
+  window.dispatchEvent(new CustomEvent('app-error', { detail: message }));
+}
+
+async function parseApiResponse(response, fallbackMessage) {
+  if (response.status === 204) return null;
+
+  const responseText = await response.text();
+  let body;
+  try {
+    body = JSON.parse(responseText);
+  } catch {
+    const requestError = new Error(
+      `The server returned an unexpected response (HTTP ${response.status}) instead of JSON. Check that the API service is running and its /api route is correctly configured.`,
+    );
+    requestError.status = response.status;
+    reportError(requestError);
+    throw requestError;
+  }
+
+  if (!response.ok) {
+    const details = body && Array.isArray(body.details)
+      ? body.details.map((detail) => detail.message).filter(Boolean).join('. ')
+      : '';
+    const requestError = new Error(
+      [body?.error || fallbackMessage, details && body?.error === 'Invalid request' ? details : '']
+        .filter(Boolean)
+        .join(': '),
+    );
+    requestError.status = response.status;
+    reportError(requestError);
+    throw requestError;
+  }
+  return body;
+}
+
 function getStoredSession() {
   const token = localStorage.getItem('northline-token');
   const storedUser = localStorage.getItem('northline-user');
@@ -109,6 +148,7 @@ function App() {
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [toastError, setToastError] = useState(null);
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
   const [category, setCategory] = useState('');
@@ -123,6 +163,24 @@ function App() {
   const [mobileFilters, setMobileFilters] = useState(false);
   const [apiStatus, setApiStatus] = useState({ state: 'checking', latency: null });
   const isAdmin = session?.user.role === 'admin';
+
+  useEffect(() => {
+    function handleAppError(event) {
+      setToastError({ message: event.detail, id: performance.now() });
+    }
+    window.addEventListener('app-error', handleAppError);
+    return () => window.removeEventListener('app-error', handleAppError);
+  }, []);
+
+  useEffect(() => {
+    if (!toastError) return undefined;
+    const timeout = window.setTimeout(() => setToastError(null), 7000);
+    return () => window.clearTimeout(timeout);
+  }, [toastError]);
+
+  useEffect(() => {
+    if (error) reportError(new Error(error));
+  }, [error]);
 
   const navigate = useCallback((path) => {
     const target = new URL(path, window.location.origin);
@@ -146,10 +204,7 @@ function App() {
     let active = true;
     const startedAt = performance.now();
     fetch('/healthz', { cache: 'no-store' })
-      .then((response) => {
-        if (!response.ok) throw new Error(`Health check returned HTTP ${response.status}`);
-        return response.json();
-      })
+      .then((response) => parseApiResponse(response, `Health check returned HTTP ${response.status}`))
       .then((body) => {
         if (active) {
           setApiStatus({
@@ -161,6 +216,7 @@ function App() {
       .catch((requestError) => {
         if (active) {
           console.error('Could not verify API and database health:', requestError);
+          reportError(requestError);
           setApiStatus({ state: 'error', latency: null });
         }
       });
@@ -175,15 +231,11 @@ function App() {
         ...(session ? { Authorization: `Bearer ${session.token}` } : {}),
         ...options.headers,
       },
-    });
-    if (response.status === 204) return null;
-    const body = await response.json();
-    if (!response.ok) {
-      const requestError = new Error(body.error || 'Something went wrong. Please try again.');
-      requestError.status = response.status;
+    }).catch((requestError) => {
+      reportError(requestError);
       throw requestError;
-    }
-    return body;
+    });
+    return parseApiResponse(response, 'Something went wrong. Please try again.');
   }, [session]);
 
   useEffect(() => {
@@ -458,6 +510,7 @@ function App() {
         <a className="skip-link" href="#main-content">Skip to main content</a>
         <PublicHeader session={session} isAdmin={isAdmin} signOut={signOut} navigate={navigate} />
         <main id="main-content" className="public-main" tabIndex="-1">{pageContent}</main>
+        <GlobalErrorToast notification={toastError} onDismiss={() => setToastError(null)} />
         <footer className="public-footer">
           <span>VEHICLE DETAILS ARE SHOWN AS RECORDED IN THE CURRENT CATALOGUE.</span>
           <span>© {new Date().getFullYear()} APEX AUTO</span>
@@ -476,6 +529,7 @@ function App() {
           <h1>That road <span>ends here.</span></h1>
           <button className="public-button" type="button" onClick={() => navigate('/')}>Return home <ArrowUpRight size={16} /></button>
         </main>
+        <GlobalErrorToast notification={toastError} onDismiss={() => setToastError(null)} />
         <footer className="public-footer"><span>© {new Date().getFullYear()} APEX AUTO</span></footer>
       </div>
     );
@@ -705,6 +759,7 @@ function App() {
 
       </main>
 
+      <GlobalErrorToast notification={toastError} onDismiss={() => setToastError(null)} />
       <footer className="apex-footer">
         <span>VEHICLE DETAILS ARE SHOWN AS RECORDED IN THE CURRENT CATALOGUE.</span>
         <span>© {new Date().getFullYear()} APEX AUTO</span>
@@ -1092,10 +1147,12 @@ function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) {
     const cleanQuery = nextQuery.trim();
     if (!session) {
       setError('Sign in to search the live vehicle inventory.');
+      reportError(new Error('Sign in to search the live vehicle inventory.'));
       return;
     }
     if (cleanQuery.length < 3 || cleanQuery.length > 2000) {
       setError('Enter a request between 3 and 2,000 characters.');
+      reportError(new Error('Enter a request between 3 and 2,000 characters.'));
       return;
     }
     setQuery(cleanQuery);
@@ -1114,17 +1171,13 @@ function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) {
         },
         body: JSON.stringify({ query: cleanQuery }),
       });
-      const body = await response.json();
       setSearchRequest({ status: response.status, latency: Math.round(performance.now() - startedAt) });
-      if (!response.ok) {
-        const failure = new Error(body.error || 'Car Finder could not complete this search.');
-        failure.status = response.status;
-        throw failure;
-      }
+      const body = await parseApiResponse(response, 'Car Finder could not complete this search.');
       setResult(body);
     } catch (failure) {
       if (failure.status === undefined) {
         setSearchRequest({ status: 'network-error', latency: Math.round(performance.now() - startedAt) });
+        reportError(failure);
       }
       setError(failure.message || 'Network error while searching the vehicle inventory.');
       if (failure.status === 401) onUnauthorized();
@@ -1169,13 +1222,8 @@ function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) {
         },
         body: JSON.stringify({ vehicle_ids: selectedIds, original_query: query }),
       });
-      const body = await response.json();
       setCompareRequest({ status: response.status, latency: Math.round(performance.now() - startedAt) });
-      if (!response.ok) {
-        const failure = new Error(body.error || 'The selected vehicles could not be compared.');
-        failure.status = response.status;
-        throw failure;
-      }
+      const body = await parseApiResponse(response, 'The selected vehicles could not be compared.');
       setComparison(body);
       window.requestAnimationFrame(() => {
         document.getElementById('comparison')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1183,6 +1231,7 @@ function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) {
     } catch (failure) {
       if (failure.status === undefined) {
         setCompareRequest({ status: 'network-error', latency: Math.round(performance.now() - startedAt) });
+        reportError(failure);
       }
       setError(failure.message || 'Network error while comparing vehicles.');
       if (failure.status === 401) onUnauthorized();
@@ -1213,11 +1262,13 @@ function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) {
         setShareNotice('Vehicle details copied to the clipboard.');
       } else {
         setError('Sharing is not available in this browser.');
+        reportError(new Error('Sharing is not available in this browser.'));
       }
     } catch (shareError) {
       if (shareError.name !== 'AbortError') {
         setShareNotice('');
         setError('Could not share this vehicle. Please try again.');
+        reportError(new Error('Could not share this vehicle. Please try again.'));
       }
     }
   }
@@ -1552,6 +1603,17 @@ function VehicleCard({ vehicle, index, isAdmin, busy, onPurchase, onEdit, onDele
   );
 }
 
+function GlobalErrorToast({ notification, onDismiss }) {
+  if (!notification) return null;
+  return (
+    <div className="global-error-toast" role="alert" aria-live="assertive">
+      <CircleHelp size={18} />
+      <span>{notification.message}</span>
+      <button type="button" aria-label="Dismiss error notification" onClick={onDismiss}><X size={16} /></button>
+    </div>
+  );
+}
+
 function AuthForm({ mode, setMode, onAuthenticated, setError, error, notice, setNotice }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -1569,8 +1631,7 @@ function AuthForm({ mode, setMode, onAuthenticated, setError, error, notice, set
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...(registering ? { name } : {}), email, password }),
       });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || 'We could not sign you in. Please try again.');
+      const body = await parseApiResponse(response, 'We could not sign you in. Please try again.');
       if (registering) {
         setMode('login');
         setPassword('');
@@ -1580,6 +1641,7 @@ function AuthForm({ mode, setMode, onAuthenticated, setError, error, notice, set
       }
       onAuthenticated({ token: body.token, user: body.user });
     } catch (requestError) {
+      reportError(requestError);
       setError(requestError.message);
     } finally {
       setSubmitting(false);
