@@ -157,9 +157,11 @@ The development history starts with the API behavior tests, recorded while the A
 
 ## My AI Usage
 
-I used GitHub Copilot, via an AI assistant using Copilot SDK in VS Code, while working from the supplied kata brief. It helped scaffold the API behavior tests and implementation, shape the React dashboard and styling, and draft the setup, API, and AI-usage documentation. The initial tests were run before the API existed; I then ran the backend tests and production build and exercised registration, administrator inventory management, stock updates, and sold-out behavior in the browser.
+I used GitHub Copilot through an AI assistant using Copilot SDK in VS Code for implementation, test development, debugging, and documentation. In this update, the assistant added test-first regression cases, versioned SQLite migrations, atomic purchase auditing, API pagination, frontend sorting/paging controls, and project documentation.
 
-AI helped me move more quickly from the brief to a complete working vertical slice. I still reviewed the generated changes against the acceptance criteria and used automated tests and browser checks rather than treating generated code as verified by default. The prompts used for this project are included unedited in [`PROMPTS.md`](PROMPTS.md).
+The assistant executed the 20-test backend suite, coverage run, production frontend build, dependency audit, and a browser smoke check of admin sign-in, pagination, and sorting against a temporary database. GitHub Actions also verified and published the implementation commit. These are tool-executed checks, not a claim that I personally performed an independent review. Before using this for an assignment, I should add the specific code-review and interview-preparation work I personally completed.
+
+[`PROMPTS.md`](PROMPTS.md) preserves the original project brief and the later user prompt attachment verbatim. It does not reconstruct unavailable assistant responses or earlier chat turns; a template is provided there for adding the complete original transcript without inventing it.
 
 ## Repository and deployment
 
