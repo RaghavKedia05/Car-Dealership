@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Activity,
@@ -98,6 +98,11 @@ function useDialogAccessibility(dialogRef, onClose, isOpen = true) {
 
 function App() {
   const [session, setSession] = useState(getStoredSession);
+  const [location, setLocation] = useState(() => ({
+    pathname: window.location.pathname,
+    search: window.location.search,
+  }));
+  const { pathname, search } = location;
   const [authMode, setAuthMode] = useState('login');
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -118,6 +123,24 @@ function App() {
   const [mobileFilters, setMobileFilters] = useState(false);
   const [apiStatus, setApiStatus] = useState({ state: 'checking', latency: null });
   const isAdmin = session?.user.role === 'admin';
+
+  const navigate = useCallback((path) => {
+    const target = new URL(path, window.location.origin);
+    const targetUrl = `${target.pathname}${target.search}${target.hash}`;
+    if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== targetUrl) {
+      window.history.pushState({}, '', targetUrl);
+    }
+    setLocation({ pathname: target.pathname, search: target.search });
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, []);
+
+  useEffect(() => {
+    function handlePopState() {
+      setLocation({ pathname: window.location.pathname, search: window.location.search });
+    }
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -144,7 +167,7 @@ function App() {
     return () => { active = false; };
   }, []);
 
-  async function api(url, options = {}) {
+  const api = useCallback(async (url, options = {}) => {
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -161,10 +184,53 @@ function App() {
       throw requestError;
     }
     return body;
-  }
+  }, [session]);
 
   useEffect(() => {
     if (!session) return undefined;
+    let active = true;
+    fetch('/api/auth/me', { headers: { Authorization: `Bearer ${session.token}` } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('The saved session is no longer valid');
+        return response.json();
+      })
+      .then(({ user }) => {
+        if (active) {
+          localStorage.setItem('northline-user', JSON.stringify(user));
+          setSession((current) => current ? { ...current, user } : current);
+        }
+      })
+      .catch((requestError) => {
+        if (active) {
+          console.warn('The saved account session could not be verified:', requestError);
+          localStorage.removeItem('northline-token');
+          localStorage.removeItem('northline-user');
+          setSession(null);
+        }
+      });
+    return () => { active = false; };
+  }, [session?.token]);
+
+  useEffect(() => {
+    if (pathname === '/login' && session) {
+      navigate(isAdmin ? '/admin/dashboard' : '/showroom');
+      return;
+    }
+    if (['/showroom', '/admin/dashboard', '/admin/inventory'].includes(pathname) && !session) {
+      navigate('/login');
+      return;
+    }
+    if (['/admin/dashboard', '/admin/inventory'].includes(pathname) && session && !isAdmin) {
+      navigate('/showroom');
+      return;
+    }
+    if (pathname === '/showroom' && isAdmin) {
+      navigate('/admin/dashboard');
+    }
+  }, [pathname, session, isAdmin]);
+
+  useEffect(() => {
+    if (!session || !['/showroom', '/admin/inventory'].includes(pathname)) return undefined;
     const search = new URLSearchParams();
     if (make.trim()) search.set('make', make.trim());
     if (model.trim()) search.set('model', model.trim());
@@ -201,27 +267,36 @@ function App() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [session, make, model, category, minPrice, maxPrice, page, pagination.pageSize, sortBy, sortOrder, refreshKey]);
+  }, [session, pathname, make, model, category, minPrice, maxPrice, page, pagination.pageSize, sortBy, sortOrder, refreshKey]);
 
   useEffect(() => {
     setPage(1);
   }, [make, model, category, minPrice, maxPrice, sortBy, sortOrder]);
 
-  function saveSession(nextSession) {
+  const saveSession = useCallback((nextSession) => {
     localStorage.setItem('northline-token', nextSession.token);
     localStorage.setItem('northline-user', JSON.stringify(nextSession.user));
     setSession(nextSession);
     setError('');
     setNotice('');
-  }
+    navigate(nextSession.user.role === 'admin' ? '/admin/dashboard' : '/showroom');
+  }, [navigate]);
 
-  function signOut() {
+  const signOut = useCallback(() => {
+    if (session) {
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.token}` },
+        keepalive: true,
+      }).catch((requestError) => console.error('Could not revoke the account session:', requestError));
+    }
     localStorage.removeItem('northline-token');
     localStorage.removeItem('northline-user');
     setSession(null);
     setVehicles([]);
     setNotice('You have been signed out.');
-  }
+    navigate('/');
+  }, [session, navigate]);
 
   async function handlePurchase(vehicle) {
     setBusyId(vehicle.id);
@@ -268,6 +343,10 @@ function App() {
             engineCapacityCc: editor.engineCapacityCc ? Number(editor.engineCapacityCc) : null,
             groundClearanceMm: editor.groundClearanceMm ? Number(editor.groundClearanceMm) : null,
             safetyFeatures: editor.safetyFeatures.trim() || null,
+            variant: editor.variant.trim() || null,
+            description: editor.description.trim() || null,
+            imageUrl: editor.imageUrl.trim() || null,
+            status: editor.status,
           }),
         },
       );
@@ -313,18 +392,85 @@ function App() {
   }
 
   const hasFilters = make || model || category || minPrice || maxPrice;
+  const vehicleRoute = pathname.match(/^\/vehicles\/([0-9a-f-]+)$/i);
+
+  if (pathname === '/' || pathname === '/vehicles' || pathname === '/login' || pathname === '/contact' || vehicleRoute
+    || pathname === '/admin/dashboard') {
+    let pageContent;
+    if (pathname === '/' || pathname === '/vehicles') {
+      pageContent = <PublicLanding api={api} navigate={navigate} showAll={pathname === '/vehicles'} />;
+    } else if (pathname === '/login') {
+      pageContent = (
+        <section className="public-auth-page">
+          <p className="eyebrow"><span className="eyebrow-line" /> ACCOUNT ACCESS</p>
+          <h1>Welcome to your <span>showroom.</span></h1>
+          <p>Sign in to browse the showroom. Administrators are directed to the dashboard after sign-in.</p>
+          <AuthForm
+            mode={authMode}
+            setMode={setAuthMode}
+            onAuthenticated={saveSession}
+            setError={setError}
+            error={error}
+            notice={notice}
+            setNotice={setNotice}
+          />
+        </section>
+      );
+    } else if (pathname === '/contact') {
+      pageContent = <ContactPage api={api} vehicleId={new URLSearchParams(search).get('vehicle')} session={session} />;
+    } else if (vehicleRoute) {
+      pageContent = <PublicVehiclePage api={api} vehicleId={vehicleRoute[1]} navigate={navigate} />;
+    } else {
+      pageContent = (
+        <AdminDashboard
+          api={api}
+          onUnauthorized={signOut}
+          navigate={navigate}
+          onInventory={() => navigate('/admin/inventory')}
+        />
+      );
+    }
+
+    return (
+      <div className="public-app">
+        <a className="skip-link" href="#main-content">Skip to main content</a>
+        <PublicHeader session={session} isAdmin={isAdmin} signOut={signOut} navigate={navigate} />
+        <main id="main-content" className="public-main" tabIndex="-1">{pageContent}</main>
+        <footer className="public-footer">
+          <span>VEHICLE DETAILS ARE SHOWN AS RECORDED IN THE CURRENT CATALOGUE.</span>
+          <span>© {new Date().getFullYear()} APEX AUTO</span>
+        </footer>
+      </div>
+    );
+  }
+
+  if (!['/showroom', '/admin/inventory'].includes(pathname)) {
+    return (
+      <div className="public-app">
+        <a className="skip-link" href="#main-content">Skip to main content</a>
+        <PublicHeader session={session} isAdmin={isAdmin} signOut={signOut} navigate={navigate} />
+        <main id="main-content" className="public-main public-not-found" tabIndex="-1">
+          <p className="eyebrow"><span className="eyebrow-line" /> PAGE NOT FOUND</p>
+          <h1>That road <span>ends here.</span></h1>
+          <button className="public-button" type="button" onClick={() => navigate('/')}>Return home <ArrowUpRight size={16} /></button>
+        </main>
+        <footer className="public-footer"><span>© {new Date().getFullYear()} APEX AUTO</span></footer>
+      </div>
+    );
+  }
 
   return (
     <div className="apex-app">
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <header className="apex-header">
-        <a className="apex-brand" href="#ai-finder" aria-label="Apex Auto home">
+        <a className="apex-brand" href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }} aria-label="Apex Auto home">
           <span className="apex-brand-mark"><CarFront size={22} strokeWidth={1.8} /></span>
           <span>APEX AUTO<small>INVENTORY, IN FOCUS</small></span>
         </a>
         <nav className="apex-desktop-nav" aria-label="Showroom">
           <a href="#ai-finder"><Sparkles size={15} /> Finder</a>
           <a href="#inventory"><CarFront size={15} /> Inventory</a>
+          <a href="/contact" onClick={(event) => { event.preventDefault(); navigate('/contact'); }}>Contact</a>
         </nav>
         <div className="apex-header-actions">
           <span className={`api-health api-health-${apiStatus.state}`} role="status">
@@ -333,14 +479,14 @@ function App() {
           </span>
           {session ? (
             <>
-              {isAdmin && <span className="apex-admin-tag"><ShieldCheck size={13} /> ADMIN</span>}
+              {isAdmin && <button className="apex-admin-tag" type="button" onClick={() => navigate('/admin/dashboard')}><ShieldCheck size={13} /> Dashboard</button>}
               <span className="apex-user"><UserRound size={15} /> {session.user.name.split(' ')[0]}</span>
               <button className="apex-signout" type="button" onClick={signOut} aria-label="Sign out" title="Sign out">
                 <LogOut size={17} />
               </button>
             </>
           ) : (
-            <a className="apex-signin" href="#account">SIGN IN <ArrowUpRight size={15} /></a>
+            <a className="apex-signin" href="/login" onClick={(event) => { event.preventDefault(); navigate('/login'); }}>SIGN IN <ArrowUpRight size={15} /></a>
           )}
         </div>
       </header>
@@ -420,7 +566,8 @@ function App() {
                     make: '', model: '', category: 'SUV', price: '', quantity: '1',
                     bodyType: '', year: '', fuelType: '', transmission: '', seatingCapacity: '',
                     mileageKmpl: '', electricRangeKm: '', engineCapacityCc: '',
-                    groundClearanceMm: '', safetyFeatures: '',
+                    groundClearanceMm: '', safetyFeatures: '', variant: '', description: '',
+                    imageUrl: '', status: 'listed',
                   })}>
                     <Plus size={16} /> Add vehicle
                   </button>
@@ -464,6 +611,10 @@ function App() {
                         engineCapacityCc: vehicle.engineCapacityCc ? String(vehicle.engineCapacityCc) : '',
                         groundClearanceMm: vehicle.groundClearanceMm ? String(vehicle.groundClearanceMm) : '',
                         safetyFeatures: vehicle.safetyFeatures || '',
+                        variant: vehicle.variant || '',
+                        description: vehicle.description || '',
+                        imageUrl: vehicle.imageUrl || '',
+                        status: vehicle.status || 'listed',
                       })}
                       onDelete={deleteVehicle}
                     />
@@ -538,6 +689,7 @@ function App() {
       </footer>
 
       <nav className="apex-bottom-nav" aria-label="Showroom navigation">
+        <a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}><CarFront size={18} /><span>Home</span></a>
         <a href="#ai-finder"><Sparkles size={18} /><span>Finder</span></a>
         <a href="#inventory"><CarFront size={18} /><span>Inventory</span></a>
         {session ? (
@@ -550,6 +702,414 @@ function App() {
       {editor && <VehicleEditor value={editor} setValue={setEditor} busy={busyId === 'editor'} onSubmit={saveVehicle} onClose={() => setEditor(null)} />}
     </div>
   );
+}
+
+function PublicHeader({ session, isAdmin, signOut, navigate }) {
+  function follow(event, path) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    navigate(path);
+  }
+
+  return (
+    <header className="public-header">
+      <a className="public-brand" href="/" onClick={(event) => follow(event, '/')} aria-label="Apex Auto home">
+        <span className="apex-brand-mark"><CarFront size={22} strokeWidth={1.8} /></span>
+        <span>APEX AUTO<small>INVENTORY, IN FOCUS</small></span>
+      </a>
+      <nav className="public-nav" aria-label="Main navigation">
+        <a href="/" onClick={(event) => follow(event, '/')}>Home</a>
+        <a href="/vehicles" onClick={(event) => follow(event, '/vehicles')}>Showroom</a>
+        <a href="/contact" onClick={(event) => follow(event, '/contact')}>Contact</a>
+      </nav>
+      <div className="public-header-actions">
+        {session ? (
+          <>
+            {isAdmin && <a className="public-admin-link" href="/admin/dashboard" onClick={(event) => follow(event, '/admin/dashboard')}><ShieldCheck size={15} /> Dashboard</a>}
+            <span className="apex-user"><UserRound size={15} /> {session.user.name.split(' ')[0]}</span>
+            <button className="apex-signout" type="button" onClick={signOut} aria-label="Sign out" title="Sign out"><LogOut size={17} /></button>
+          </>
+        ) : (
+          <a className="public-signin" href="/login" onClick={(event) => follow(event, '/login')}>SIGN IN <ArrowUpRight size={15} /></a>
+        )}
+      </div>
+    </header>
+  );
+}
+
+function PublicLanding({ api, navigate, showAll = false }) {
+  const [vehicles, setVehicles] = useState([]);
+  const [keyword, setKeyword] = useState('');
+  const [pagination, setPagination] = useState({ page: 1, totalPages: 0, total: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const requestId = useRef(0);
+
+  async function loadVehicles(search = '', nextPage = 1) {
+    const currentRequest = requestId.current + 1;
+    requestId.current = currentRequest;
+    setLoading(true);
+    setError('');
+    try {
+      const params = new URLSearchParams({
+        pageSize: showAll ? '12' : '6',
+        page: String(showAll ? nextPage : 1),
+        sortBy: 'createdAt',
+        sortOrder: 'desc',
+      });
+      if (search.trim()) params.set('keyword', search.trim());
+      const result = await api(`/api/public/vehicles?${params}`);
+      if (requestId.current === currentRequest) {
+        setVehicles(result.vehicles);
+        setPagination(result.pagination);
+      }
+    } catch (requestError) {
+      if (requestId.current === currentRequest) setError(requestError.message);
+    } finally {
+      if (requestId.current === currentRequest) setLoading(false);
+    }
+  }
+
+  useEffect(() => { loadVehicles(); }, []);
+
+  function search(event) {
+    event.preventDefault();
+    loadVehicles(keyword, 1);
+  }
+
+  return (
+    <>
+      <section className="public-hero">
+        <div className="public-hero-copy">
+          <p className="eyebrow"><span className="eyebrow-line" /> A MORE CONSIDERED WAY TO DRIVE</p>
+          <h1>Find the car<br />that fits <span>your life.</span></h1>
+          <p className="public-lede">Thoughtfully selected vehicles, honest details, and a team ready to help you take the next turn.</p>
+          <div className="public-hero-actions">
+            <a className="public-button" href="#inventory">Explore the collection <ArrowUpRight size={16} /></a>
+            <a className="public-text-link" href="/contact" onClick={(event) => { event.preventDefault(); navigate('/contact'); }}>Talk to our team</a>
+          </div>
+          <p className="public-proof"><ShieldCheck size={16} /> Current listings shown directly from the dealership catalogue</p>
+        </div>
+        <div className="public-hero-art" aria-hidden="true">
+          <div className="public-hero-orbit" />
+          <CarFront size={310} strokeWidth={0.55} />
+          <span>DRIVE SOMETHING MEANINGFUL</span>
+        </div>
+      </section>
+
+      <section className="public-catalogue" id="inventory" aria-labelledby="public-inventory-title">
+        <div className="public-section-heading">
+          <div><p className="eyebrow"><span className="eyebrow-line" /> THE CURRENT COLLECTION</p><h2 id="public-inventory-title">A good place to <span>begin.</span></h2></div>
+          <p>Browse the vehicles currently listed by the dealership. Every listing reflects recorded catalogue details.</p>
+        </div>
+        <form className="public-search" onSubmit={search} role="search">
+          <label htmlFor="catalogue-search"><Search size={18} /><span className="sr-only">Search vehicles</span></label>
+          <input id="catalogue-search" value={keyword} onChange={(event) => setKeyword(event.target.value)} maxLength="120" placeholder="Search make, model, variant, or details" />
+          <button className="public-button" type="submit" disabled={loading}>Search collection</button>
+        </form>
+        {error && <div className="notice notice-error" role="alert">{error}<button type="button" onClick={() => loadVehicles(keyword, pagination.page)}>Retry</button></div>}
+        {loading ? <div className="empty-state"><div className="loading-spinner" /><p>Loading current listings…</p></div>
+          : vehicles.length ? (
+            <div className="public-vehicle-grid">
+              {vehicles.map((vehicle) => <PublicVehicleCard key={vehicle.id} vehicle={vehicle} onOpen={() => navigate(`/vehicles/${vehicle.id}`)} />)}
+            </div>
+          ) : (
+            <div className="public-empty"><CarFront size={30} /><h3>No listed vehicles found</h3><p>Try another search, or check back as the collection is updated.</p></div>
+          )}
+        <div className="public-catalogue-footer">
+          <span>Only listed vehicles appear here; availability can change. {showAll && `${pagination.total} listing${pagination.total === 1 ? '' : 's'}.`}</span>
+          {showAll ? (
+            <nav className="public-pagination" aria-label="Vehicle catalogue pages">
+              <button type="button" disabled={pagination.page <= 1 || loading} onClick={() => loadVehicles(keyword, pagination.page - 1)}>Previous</button>
+              <span>Page {pagination.page} of {Math.max(pagination.totalPages, 1)}</span>
+              <button type="button" disabled={pagination.page >= pagination.totalPages || loading} onClick={() => loadVehicles(keyword, pagination.page + 1)}>Next</button>
+            </nav>
+          ) : (
+            <button className="public-text-link" type="button" onClick={() => navigate('/vehicles')}>View full collection ({pagination.total}) <ArrowUpRight size={15} /></button>
+          )}
+        </div>
+      </section>
+      <section className="public-contact-cta">
+        <div><p className="eyebrow"><span className="eyebrow-line" /> HERE WHEN YOU NEED US</p><h2>Have a question<br />before the <span>test drive?</span></h2></div>
+        <button className="public-button" type="button" onClick={() => navigate('/contact')}>Send an enquiry <ArrowUpRight size={16} /></button>
+      </section>
+    </>
+  );
+}
+
+function PublicVehicleCard({ vehicle, onOpen }) {
+  return (
+    <article className="public-vehicle-card">
+      <button className="public-vehicle-image" type="button" onClick={onOpen} aria-label={`View ${vehicle.make} ${vehicle.model}`}>
+        {vehicle.imageUrl ? <img src={vehicle.imageUrl} alt={`${vehicle.year ? `${vehicle.year} ` : ''}${vehicle.make} ${vehicle.model}`} loading="lazy" />
+          : <><span className="public-image-orbit" /><CarFront size={90} strokeWidth={0.8} aria-hidden="true" /></>}
+        <span className="public-listing-label">{vehicle.quantity > 0 ? 'AVAILABLE' : 'SOLD OUT'}</span>
+      </button>
+      <div className="public-vehicle-content">
+        <div className="public-vehicle-title"><div><p>{[vehicle.year, vehicle.make, vehicle.variant].filter(Boolean).join(' · ')}</p><h3>{vehicle.model}</h3></div><span>{vehicle.category}</span></div>
+        <div className="public-vehicle-summary">{vehicle.bodyType || vehicle.fuelType || 'Vehicle details available'}</div>
+        <div className="public-vehicle-bottom"><strong>{money(vehicle.price)}</strong><button type="button" onClick={onOpen}>View details <ArrowUpRight size={15} /></button></div>
+      </div>
+    </article>
+  );
+}
+
+function PublicVehiclePage({ api, vehicleId, navigate }) {
+  const [vehicle, setVehicle] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setVehicle(null);
+    setError('');
+    setLoading(true);
+    api(`/api/public/vehicles/${vehicleId}`)
+      .then((result) => { if (active) setVehicle(result.vehicle); })
+      .catch((requestError) => { if (active) setError(requestError.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [api, vehicleId]);
+
+  if (loading) return <div className="empty-state"><div className="loading-spinner" /><p>Loading vehicle details…</p></div>;
+  if (error || !vehicle) return <section className="public-not-found"><p className="eyebrow"><span className="eyebrow-line" /> LISTING UNAVAILABLE</p><h1>We couldn’t find <span>that vehicle.</span></h1><p>{error || 'This vehicle may have been removed from the public catalogue.'}</p><button className="public-button" type="button" onClick={() => navigate('/')}>Back to collection <ArrowUpRight size={16} /></button></section>;
+
+  const details = [
+    ['Year', vehicle.year], ['Variant', vehicle.variant], ['Category', vehicle.category],
+    ['Body type', vehicle.bodyType], ['Fuel', vehicle.fuelType], ['Transmission', vehicle.transmission],
+    ['Seats', vehicle.seatingCapacity], ['Mileage', vehicle.mileageKmpl ? `${vehicle.mileageKmpl} km/l` : null],
+    ['Electric range', vehicle.electricRangeKm ? `${vehicle.electricRangeKm} km` : null],
+    ['Engine', vehicle.engineCapacityCc ? `${vehicle.engineCapacityCc} cc` : null],
+    ['Ground clearance', vehicle.groundClearanceMm ? `${vehicle.groundClearanceMm} mm` : null],
+  ].filter(([, value]) => value !== null && value !== undefined && value !== '');
+
+  return (
+    <article className="public-vehicle-detail">
+      <button className="public-back-link" type="button" onClick={() => navigate('/')}>← Back to the collection</button>
+      <div className="public-detail-layout">
+        <div className="public-detail-image">
+          {vehicle.imageUrl ? <img src={vehicle.imageUrl} alt={`${vehicle.make} ${vehicle.model}`} />
+            : <><span className="public-image-orbit" /><CarFront size={190} strokeWidth={0.7} aria-hidden="true" /></>}
+        </div>
+        <div className="public-detail-copy">
+          <p className="eyebrow"><span className="eyebrow-line" /> {vehicle.status === 'listed' ? 'CURRENT LISTING' : 'UNLISTED'}</p>
+          <p className="public-detail-make">{[vehicle.year, vehicle.make, vehicle.variant].filter(Boolean).join(' · ')}</p>
+          <h1>{vehicle.model}</h1>
+          <p className="public-detail-price">{money(vehicle.price)}</p>
+          <p className="public-detail-stock">{vehicle.quantity > 0 ? `${vehicle.quantity} currently in stock` : 'Currently out of stock'}</p>
+          {vehicle.description && <p className="public-detail-description">{vehicle.description}</p>}
+          <button className="public-button" type="button" onClick={() => navigate(`/contact?vehicle=${encodeURIComponent(vehicle.id)}`)}>Enquire about this vehicle <ArrowUpRight size={16} /></button>
+          <p className="public-detail-disclaimer">Availability and specifications reflect the catalogue and may change. Confirm details with the dealership.</p>
+        </div>
+      </div>
+      {details.length > 0 && <section className="public-specifications"><h2>Recorded specifications</h2><dl>{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></section>}
+      {vehicle.safetyFeatures && <p className="public-safety-note"><strong>Safety features:</strong> {vehicle.safetyFeatures}</p>}
+    </article>
+  );
+}
+
+function ContactPage({ api, vehicleId: initialVehicleId, session }) {
+  const [vehicles, setVehicles] = useState([]);
+  const [vehicleId, setVehicleId] = useState(initialVehicleId || '');
+  const [vehicleLoadError, setVehicleLoadError] = useState('');
+  const [form, setForm] = useState({ customerName: session?.user.name || '', email: session?.user.email || '', phone: '', subject: '', message: '' });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    api('/api/public/vehicles?pageSize=100')
+      .then((result) => { if (active) setVehicles(result.vehicles); })
+      .catch((requestError) => { if (active) setVehicleLoadError(requestError.message); });
+    return () => { active = false; };
+  }, [api]);
+
+  useEffect(() => {
+    setVehicleId(initialVehicleId || '');
+  }, [initialVehicleId]);
+
+  function update(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+    setSuccess('');
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError('');
+    setSuccess('');
+    try {
+      const submissionKey = window.crypto.randomUUID();
+      const result = await api('/api/enquiries', {
+        method: 'POST',
+        body: JSON.stringify({ ...form, subject: form.subject.trim() || 'Vehicle enquiry', vehicleId: vehicleId || undefined, submissionKey }),
+      });
+      setSuccess(result.message);
+      setForm((current) => ({ ...current, phone: '', subject: '', message: '' }));
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="public-contact-page">
+      <div className="public-contact-intro">
+        <p className="eyebrow"><span className="eyebrow-line" /> START A CONVERSATION</p>
+        <h1>Let’s talk about <span>your next drive.</span></h1>
+        <p>Send a question about a listing or tell us what you’re looking for. The dealership will receive your message as an enquiry.</p>
+        <div className="contact-detail-note"><LockKeyhole size={17} /><span>Your details are used to respond to this enquiry. No dealership phone number or address has been configured in this catalogue.</span></div>
+      </div>
+      <form className="public-contact-form" onSubmit={submit}>
+        {error && <div className="form-error" role="alert"><CircleHelp size={16} /> {error}</div>}
+        {success && <div className="form-success" role="status"><Check size={16} /> {success}</div>}
+        {vehicleLoadError && <p className="field-help" role="status">Vehicle choices could not be loaded: {vehicleLoadError} You can still send a general enquiry.</p>}
+        <div className="editor-grid">
+          <label className="form-label">YOUR NAME<input required minLength="2" maxLength="80" autoComplete="name" value={form.customerName} onChange={(event) => update('customerName', event.target.value)} /></label>
+          <label className="form-label">EMAIL ADDRESS<input required type="email" maxLength="254" autoComplete="email" value={form.email} onChange={(event) => update('email', event.target.value)} /></label>
+          <label className="form-label">PHONE (OPTIONAL)<input type="tel" maxLength="30" autoComplete="tel" value={form.phone} onChange={(event) => update('phone', event.target.value)} /></label>
+          <label className="form-label">VEHICLE (OPTIONAL)<select value={vehicleId} onChange={(event) => setVehicleId(event.target.value)}><option value="">General enquiry</option>{vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.make} {vehicle.model}</option>)}</select></label>
+          <label className="form-label form-label-full">SUBJECT<input maxLength="120" value={form.subject} onChange={(event) => update('subject', event.target.value)} placeholder="What can we help with?" /></label>
+          <label className="form-label form-label-full">MESSAGE<textarea required minLength="10" maxLength="4000" rows="6" value={form.message} onChange={(event) => update('message', event.target.value)} placeholder="Share your question or the kind of vehicle you’re looking for." /></label>
+        </div>
+        <button className="public-button" type="submit" disabled={submitting}>{submitting ? 'Sending enquiry…' : 'Send enquiry'} <ArrowUpRight size={16} /></button>
+      </form>
+    </section>
+  );
+}
+
+function AdminDashboard({ api, onUnauthorized, onInventory }) {
+  const [dashboard, setDashboard] = useState(null);
+  const [enquiries, setEnquiries] = useState([]);
+  const [pagination, setPagination] = useState({ page: 1, totalPages: 0, total: 0 });
+  const [status, setStatus] = useState('');
+  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState('');
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    const params = new URLSearchParams({ page: String(pagination.page), pageSize: '10' });
+    if (status) params.set('status', status);
+    if (search) params.set('search', search);
+    setLoading(true);
+    setError('');
+    Promise.all([api('/api/admin/dashboard'), api(`/api/admin/enquiries?${params}`)])
+      .then(([summary, result]) => {
+        if (active) {
+          setDashboard(summary);
+          setEnquiries(result.enquiries);
+          setPagination(result.pagination);
+        }
+      })
+      .catch((requestError) => {
+        if (active) {
+          setError(requestError.message);
+          if (requestError.status === 401 || requestError.status === 403) onUnauthorized();
+        }
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [api, onUnauthorized, pagination.page, reload, search, status]);
+
+  async function updateEnquiry(id, nextStatus) {
+    setUpdatingId(id);
+    setError('');
+    try {
+      const result = await api(`/api/admin/enquiries/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      setEnquiries((current) => current.map((item) => item.id === id ? result.enquiry : item));
+      setDashboard((current) => current ? {
+        ...current,
+        enquiries: {
+          ...current.enquiries,
+          pending: current.enquiries.pending + (result.enquiry.status === 'new' ? 1 : 0)
+            - (enquiries.find((item) => item.id === id)?.status === 'new' ? 1 : 0),
+        },
+        recentEnquiries: current.recentEnquiries.map((item) => item.id === id ? result.enquiry : item),
+      } : current);
+    } catch (requestError) {
+      setError(requestError.message);
+      if (requestError.status === 401 || requestError.status === 403) onUnauthorized();
+    } finally {
+      setUpdatingId('');
+    }
+  }
+
+  function applySearch(event) {
+    event.preventDefault();
+    setPagination((current) => ({ ...current, page: 1 }));
+    setSearch(searchInput.trim());
+  }
+
+  return (
+    <section className="admin-dashboard">
+      <div className="admin-page-heading">
+        <div><p className="eyebrow"><span className="eyebrow-line" /> DEALERSHIP OPERATIONS</p><h1>Admin <span>dashboard.</span></h1><p>Live figures and customer enquiries from your dealership database.</p></div>
+        <button className="public-button" type="button" onClick={onInventory}>Manage inventory <CarFront size={16} /></button>
+      </div>
+      {error && <div className="notice notice-error" role="alert">{error}<button type="button" onClick={() => setReload((current) => current + 1)}>Retry</button></div>}
+      {loading && !dashboard ? <div className="empty-state"><div className="loading-spinner" /><p>Loading dealership data…</p></div> : dashboard && (
+        <>
+          <div className="admin-metric-grid">
+            <AdminMetric title="Vehicles in inventory" value={dashboard.inventory.totalVehicles} detail={`${dashboard.inventory.availableVehicles} listed with stock`} />
+            <AdminMetric title="Inventory value" value={money(dashboard.inventory.inventoryValue)} detail="Current listed stock" />
+            <AdminMetric title="Enquiries" value={dashboard.enquiries.total} detail={`${dashboard.enquiries.pending} new`} />
+            <AdminMetric title="Sold out" value={dashboard.inventory.soldVehicles} detail="Listed, currently out of stock" />
+          </div>
+          <div className="admin-data-grid">
+            <section className="admin-panel"><div className="admin-panel-heading"><div><p className="eyebrow"><span className="eyebrow-line" /> INVENTORY SNAPSHOT</p><h2>What’s in the <span>collection.</span></h2></div></div>
+              <AdminBreakdown title="By make" groups={dashboard.groups.make} />
+              <AdminBreakdown title="By body type" groups={dashboard.groups.bodyType} />
+              <AdminBreakdown title="By fuel" groups={dashboard.groups.fuelType} />
+            </section>
+            <section className="admin-panel"><div className="admin-panel-heading"><div><p className="eyebrow"><span className="eyebrow-line" /> RECENT STOCK CHANGES</p><h2>Recently <span>updated.</span></h2></div></div>
+              {dashboard.recentVehicles.length ? (
+                <ul className="admin-recent-list">
+                  {dashboard.recentVehicles.map((vehicle) => (
+                    <li key={vehicle.id}>
+                      <div><strong>{vehicle.make} {vehicle.model}</strong><span>{vehicle.status} · {vehicle.quantity} in stock</span></div>
+                      <strong>{money(vehicle.price)}</strong>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="admin-empty">No vehicle listings have been added yet.</p>}
+            </section>
+          </div>
+          <section className="admin-panel admin-enquiries">
+            <div className="admin-panel-heading"><div><p className="eyebrow"><span className="eyebrow-line" /> CUSTOMER MESSAGES</p><h2>Enquiry <span>inbox.</span></h2></div><span className="admin-total">{pagination.total} total</span></div>
+            <form className="admin-enquiry-filters" onSubmit={applySearch}>
+              <label className="search-field"><Search size={16} /><input aria-label="Search enquiries" placeholder="Search name, email, or subject" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} /></label>
+              <label className="select-field"><span className="sr-only">Filter enquiries by status</span><select value={status} onChange={(event) => { setStatus(event.target.value); setPagination((current) => ({ ...current, page: 1 })); }}><option value="">All statuses</option><option value="new">New</option><option value="contacted">Contacted</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option></select></label>
+              <button className="public-button" type="submit">Search</button>
+            </form>
+            {enquiries.length ? (
+              <div className="admin-table-wrap"><table className="admin-enquiry-table"><thead><tr><th scope="col">Customer</th><th scope="col">Enquiry</th><th scope="col">Vehicle</th><th scope="col">Received</th><th scope="col">Status</th></tr></thead>
+                <tbody>{enquiries.map((enquiry) => <tr key={enquiry.id}><td><strong>{enquiry.customerName}</strong><a href={`mailto:${enquiry.email}`}>{enquiry.email}</a>{enquiry.phone && <a href={`tel:${enquiry.phone}`}>{enquiry.phone}</a>}</td><td><strong>{enquiry.subject}</strong><p>{enquiry.message}</p></td><td>{enquiry.vehicle ? `${enquiry.vehicle.make} ${enquiry.vehicle.model}` : 'General'}</td><td>{new Date(enquiry.createdAt).toLocaleDateString()}</td><td><select aria-label={`Update status for ${enquiry.customerName}'s enquiry`} disabled={updatingId === enquiry.id} value={enquiry.status} onChange={(event) => updateEnquiry(enquiry.id, event.target.value)}><option value="new">New</option><option value="contacted">Contacted</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option></select></td></tr>)}</tbody>
+              </table></div>
+            ) : <p className="admin-empty">{loading ? 'Loading enquiries…' : 'No enquiries match these filters.'}</p>}
+            {pagination.totalPages > 1 && <nav className="inventory-pagination" aria-label="Enquiry pages"><button type="button" disabled={pagination.page <= 1 || loading} onClick={() => setPagination((current) => ({ ...current, page: current.page - 1 }))}>Previous</button><span>Page {pagination.page} of {pagination.totalPages}</span><button type="button" disabled={pagination.page >= pagination.totalPages || loading} onClick={() => setPagination((current) => ({ ...current, page: current.page + 1 }))}>Next</button></nav>}
+          </section>
+        </>
+      )}
+    </section>
+  );
+}
+
+function AdminMetric({ title, value, detail }) {
+  return <article className="admin-metric"><span>{title}</span><strong>{value}</strong><small>{detail}</small></article>;
+}
+
+function AdminBreakdown({ title, groups }) {
+  const maximum = Math.max(1, ...groups.map((group) => group.count));
+  return <div className="admin-breakdown"><h3>{title}</h3>{groups.length ? groups.map((group) => <div className="admin-bar-row" key={group.label}><span>{group.label}</span><div className="admin-bar-track"><span style={{ width: `${Math.max(5, (group.count / maximum) * 100)}%` }} /></div><strong>{group.count}</strong></div>) : <p className="admin-empty">No data recorded.</p>}</div>;
 }
 
 function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) {
@@ -994,33 +1554,37 @@ function VehicleCard({ vehicle, index, isAdmin, busy, onPurchase, onEdit, onDele
   return (
     <article className={`vehicle-card ${variant === 1 ? 'vehicle-card-sand' : ''} ${variant === 2 ? 'vehicle-card-blue' : ''}`}>
       <div className={`vehicle-artwork artwork-${variant}`}>
-        <span className="vehicle-stock">{soldOut ? 'JUST LEFT' : `${String(vehicle.quantity).padStart(2, '0')} AVAILABLE`}</span>
-        <div className="vehicle-art-number">0{String(index + 1).slice(-1)}</div>
-        <div className="vehicle-art-circle" />
-        <CarFront className="vehicle-illustration" strokeWidth={0.85} aria-hidden="true" />
-        <span className="vehicle-art-label">APEX AUTO / LIVE LISTING</span>
+        <span className="vehicle-stock">{vehicle.status === 'unlisted' ? 'UNLISTED' : soldOut ? 'SOLD OUT' : `${String(vehicle.quantity).padStart(2, '0')} AVAILABLE`}</span>
+        {vehicle.imageUrl ? <img className="vehicle-photo" src={vehicle.imageUrl} alt={`${vehicle.make} ${vehicle.model}`} loading="lazy" /> : (
+          <>
+            <div className="vehicle-art-number">0{String(index + 1).slice(-1)}</div>
+            <div className="vehicle-art-circle" />
+            <CarFront className="vehicle-illustration" strokeWidth={0.85} aria-hidden="true" />
+            <span className="vehicle-art-label">APEX AUTO / LIVE LISTING</span>
+          </>
+        )}
       </div>
       <div className="vehicle-details">
         <div className="vehicle-heading">
           <div>
-            <span className="vehicle-make">{vehicle.make}</span>
+            <span className="vehicle-make">{[vehicle.year, vehicle.make, vehicle.variant].filter(Boolean).join(' · ')}</span>
             <h3>{vehicle.model}</h3>
           </div>
           <span className="category-pill">{vehicle.category}</span>
         </div>
         <div className="vehicle-spec-row">
           <span><Gauge size={14} /> {vehicle.quantity > 0 ? 'IN STOCK' : 'OUT OF STOCK'}</span>
-          <span><CarFront size={14} /> LIVE LISTING</span>
+          <span><CarFront size={14} /> {vehicle.status === 'listed' ? 'LIVE LISTING' : 'HIDDEN LISTING'}</span>
         </div>
         <div className="vehicle-card-footer">
           <div><span className="price-caption">YOUR NEXT CHAPTER FROM</span><span className="vehicle-price">{money(vehicle.price)}</span></div>
           <button
             className={`purchase-button ${soldOut ? 'purchase-disabled' : ''}`}
             type="button"
-            disabled={soldOut || busy}
+            disabled={soldOut || busy || vehicle.status === 'unlisted'}
             onClick={() => onPurchase(vehicle)}
           >
-            {busy ? <span className="loading-spinner spinner-small" /> : soldOut ? 'Sold out' : <>Purchase <ArrowUpRight size={15} /></>}
+            {busy ? <span className="loading-spinner spinner-small" /> : vehicle.status === 'unlisted' ? 'Unlisted' : soldOut ? 'Sold out' : <>Purchase <ArrowUpRight size={15} /></>}
           </button>
         </div>
         {isAdmin && (
@@ -1116,7 +1680,7 @@ function VehicleEditor({ value, setValue, busy, onSubmit, onClose }) {
           <label className="form-label form-label-full">UNITS IN STOCK<input required type="number" min="0" step="1" value={value.quantity} onChange={(event) => update('quantity', event.target.value)} /></label>
         </div>
         <details className="vehicle-spec-editor">
-          <summary>Vehicle specifications <span>Optional · leave unknown fields blank</span></summary>
+          <summary>Specifications and public listing <span>Only enter verified information</span></summary>
           <div className="editor-grid">
             <label className="form-label">BODY TYPE<input maxLength="40" value={value.bodyType} onChange={(event) => update('bodyType', event.target.value)} placeholder="Compact SUV" /></label>
             <label className="form-label">MODEL YEAR<input type="number" min="1886" max="2100" step="1" value={value.year} onChange={(event) => update('year', event.target.value)} placeholder="2024" /></label>
@@ -1128,6 +1692,10 @@ function VehicleEditor({ value, setValue, busy, onSubmit, onClose }) {
             <label className="form-label">ENGINE (CC)<input type="number" min="1" max="20000" step="1" value={value.engineCapacityCc} onChange={(event) => update('engineCapacityCc', event.target.value)} /></label>
             <label className="form-label">GROUND CLEARANCE (MM)<input type="number" min="1" max="1000" step="1" value={value.groundClearanceMm} onChange={(event) => update('groundClearanceMm', event.target.value)} /></label>
             <label className="form-label form-label-full">RECORDED SAFETY FEATURES<input maxLength="500" value={value.safetyFeatures} onChange={(event) => update('safetyFeatures', event.target.value)} placeholder="Enter only verified features" /></label>
+            <label className="form-label form-label-full">PUBLIC VARIANT<input maxLength="80" value={value.variant} onChange={(event) => update('variant', event.target.value)} placeholder="Inscription AWD" /></label>
+            <label className="form-label">LISTING VISIBILITY<select value={value.status} onChange={(event) => update('status', event.target.value)}><option value="listed">Listed publicly</option><option value="unlisted">Hidden from public</option></select></label>
+            <label className="form-label form-label-full">IMAGE URL (HTTPS)<input type="url" maxLength="2048" value={value.imageUrl} onChange={(event) => update('imageUrl', event.target.value)} placeholder="https://…" /><span className="field-help">Images must be hosted at a persistent HTTPS URL. Upload/storage is not included.</span></label>
+            <label className="form-label form-label-full">PUBLIC DESCRIPTION<textarea maxLength="4000" rows="4" value={value.description} onChange={(event) => update('description', event.target.value)} placeholder="Describe verified vehicle details for prospective customers." /></label>
           </div>
         </details>
         <button className="auth-submit" disabled={busy} type="submit">{busy ? 'Saving…' : value.vehicle ? 'Save changes' : 'Add to the collection'} <ArrowUpRight size={16} /></button>

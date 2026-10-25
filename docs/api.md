@@ -24,9 +24,13 @@ Returns `200` with `{ "token": "...", "user": { "id", "name", "email", "role" } 
 
 Authenticated. Returns the current public user object. Missing, invalid, or expired tokens return `401`.
 
+### `POST /api/auth/logout`
+
+Authenticated. Revokes the current token immediately and returns `204`. The client must sign in again to obtain a new token.
+
 ## Inventory
 
-Every inventory endpoint requires authentication unless stated otherwise. Vehicle JSON fields include `id`, `make`, `model`, `category`, `price` (INR), `quantity`, `createdAt`, `updatedAt`, and optional nullable specifications: `bodyType`, `year`, `fuelType`, `transmission`, `seatingCapacity`, `mileageKmpl`, `electricRangeKm`, `engineCapacityCc`, `groundClearanceMm`, and `safetyFeatures`. Unknown specifications are `null`, not inferred.
+Authenticated customers can see listed vehicles only; administrators can also see unlisted records. Vehicle JSON fields include `id`, `make`, `model`, `category`, `price` (INR), `quantity`, `createdAt`, `updatedAt`, `status` (`listed` or `unlisted`), and optional nullable fields: `variant`, `description`, `imageUrl`, `bodyType`, `year`, `fuelType`, `transmission`, `seatingCapacity`, `mileageKmpl`, `electricRangeKm`, `engineCapacityCc`, `groundClearanceMm`, and `safetyFeatures`. Unknown specifications are not inferred. `imageUrl` accepts HTTPS links only; image upload and persistent image storage are not included.
 
 ### `GET /api/vehicles` and `GET /api/vehicles/search`
 
@@ -43,9 +47,13 @@ Example: `/api/vehicles/search?make=Volvo&minPrice=25000&maxPrice=60000&page=1&p
 
 Returns `{ "vehicles": [...], "pagination": { "page", "pageSize", "total", "totalPages" } }`. Invalid filters, ranges, or pagination return `400`.
 
+### `GET /api/public/vehicles` and `GET /api/public/vehicles/{id}`
+
+Public, no account required. These routes expose listed vehicles only. The list accepts the regular catalogue filters plus `keyword` (searches make, model, variant, and description), `fuelType`, `transmission`, `minSeats`, and `sortBy=year`. The detail route returns `404` for missing or unlisted vehicles.
+
 ### `GET /api/vehicles/{id}`
 
-Returns `{ "vehicle": ... }` or `404` if missing.
+Authenticated. Customers receive `404` for unlisted vehicles; administrators can read all inventory.
 
 ### `POST /api/vehicles` — administrator
 
@@ -59,7 +67,7 @@ Returns `201` with the created vehicle. Prices are INR, finite, and positive; qu
 
 ### `PUT /api/vehicles/{id}` — administrator
 
-Accepts the same complete vehicle fields as creation and returns the updated vehicle. Returns `404` if missing and `400` for invalid input.
+Accepts the same complete vehicle fields as creation and returns the updated vehicle. Supports `variant`, `description`, `imageUrl`, and listing `status`. Returns `404` if missing and `400` for invalid input.
 
 ### `DELETE /api/vehicles/{id}` — administrator
 
@@ -81,9 +89,40 @@ Authenticated user. Purchases one unit. Returns:
 
 The stock decrement and historical price snapshot are committed atomically. Returns `404` for a missing vehicle or `409` when stock is exhausted. A failed operation does not create a purchase record.
 
+Customers cannot purchase unlisted vehicles.
+
 ### `POST /api/vehicles/{id}/restock` — administrator
 
 Request: `{ "quantity": 5 }`. The quantity must be a positive integer. Returns `{ "vehicle": ... }`, `404` if missing, or `400` if invalid or if the maximum inventory quantity would be exceeded.
+
+## Customer enquiries
+
+### `POST /api/enquiries`
+
+Public with optional bearer authentication. Submits a general enquiry or one linked to a publicly listed vehicle:
+
+```json
+{
+  "submissionKey": "cb7d8922-90ca-4caf-9588-58c91cdd225f",
+  "customerName": "Alex Customer",
+  "email": "alex@example.com",
+  "phone": "+91 98765 43210",
+  "subject": "Vehicle availability",
+  "message": "Please let me know if this vehicle is available for a test drive.",
+  "vehicleId": null
+}
+```
+
+Returns `201` with the enquiry ID and initial status. `submissionKey` is a client-generated UUID used to prevent duplicate submissions. Duplicate keys return `409`; invalid requests return `400`; the selected vehicle must still be publicly listed. Authenticated submissions are associated with the account.
+
+## Administrator dashboard
+
+All administrator routes require an administrator token.
+
+- `GET /api/admin/dashboard` returns database-backed inventory and enquiry metrics, grouped inventory, and recent records.
+- `GET /api/admin/enquiries` accepts `status`, `search`, `page`, and `pageSize` filters and returns paginated enquiries.
+- `GET /api/admin/enquiries/{id}` reads one enquiry.
+- `PATCH /api/admin/enquiries/{id}` accepts `{ "status": "contacted" }`; supported states are `new`, `contacted`, `in_progress`, and `resolved`.
 
 ## Health
 

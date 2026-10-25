@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Northline Motors Dealership API
-  version: 2.0.0
-  description: REST API for authenticated dealership inventory and purchases.
+  title: Apex Auto Dealership API
+  version: 3.0.0
+  description: Public vehicle catalogue, authenticated showroom, customer enquiries, and administrator operations.
 servers:
   - url: /api
 security:
@@ -55,6 +55,176 @@ paths:
           description: Public user profile
         '401':
           description: Missing or invalid token
+  /auth/logout:
+    post:
+      summary: Revoke the current access token
+      responses:
+        '204':
+          description: Token revoked
+        '401':
+          description: Missing or invalid token
+  /public/vehicles:
+    get:
+      security: []
+      summary: Browse listed vehicles without an account
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 12
+        - name: keyword
+          in: query
+          schema:
+            type: string
+            maxLength: 120
+        - name: make
+          in: query
+          schema:
+            type: string
+            maxLength: 60
+        - name: model
+          in: query
+          schema:
+            type: string
+            maxLength: 60
+        - name: category
+          in: query
+          schema:
+            type: string
+            maxLength: 40
+        - name: minPrice
+          in: query
+          schema:
+            type: number
+            minimum: 0
+        - name: maxPrice
+          in: query
+          schema:
+            type: number
+            minimum: 0
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [make, model, category, price, createdAt, year]
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        '200':
+          description: Public catalogue page containing listed vehicles only
+        '400':
+          description: Invalid catalogue filter
+  /public/vehicles/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      security: []
+      summary: Read one publicly listed vehicle
+      responses:
+        '200':
+          description: Vehicle details
+        '404':
+          description: Vehicle is missing or unlisted
+  /enquiries:
+    post:
+      security:
+        - {}
+        - bearerAuth: []
+      summary: Submit a vehicle or general enquiry
+      description: Public endpoint with optional account association. Repeated submission keys return 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnquiryInput'
+      responses:
+        '201':
+          description: Enquiry created
+        '400':
+          description: Invalid enquiry
+        '404':
+          description: Selected vehicle is unavailable
+        '409':
+          description: Enquiry submission key was already used
+        '429':
+          description: Enquiry rate limit exceeded
+  /admin/dashboard:
+    get:
+      summary: Get live inventory and enquiry aggregates (administrator)
+      responses:
+        '200':
+          description: Inventory metrics, grouped inventory, and recent records
+        '401':
+          description: Authentication required
+        '403':
+          description: Administrator access required
+  /admin/enquiries:
+    get:
+      summary: List and filter customer enquiries (administrator)
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [new, contacted, in_progress, resolved]
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 120
+      responses:
+        '200':
+          description: Paginated enquiry results
+        '403':
+          description: Administrator access required
+  /admin/enquiries/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      summary: Read one enquiry (administrator)
+      responses:
+        '200':
+          description: Enquiry record
+        '404':
+          description: Enquiry not found
+    patch:
+      summary: Update enquiry status (administrator)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [new, contacted, in_progress, resolved]
+      responses:
+        '200':
+          description: Updated enquiry record
+        '400':
+          description: Invalid status
+        '403':
+          description: Administrator access required
+        '404':
+          description: Enquiry not found
   /ai/car-finder:
     post:
       summary: Interpret a natural-language request and recommend available inventory
@@ -402,4 +572,51 @@ components:
         safetyFeatures:
           type: string
           maxLength: 500
+          nullable: true
+        variant:
+          type: string
+          maxLength: 80
+          nullable: true
+        description:
+          type: string
+          maxLength: 4000
+          nullable: true
+        imageUrl:
+          type: string
+          format: uri
+          description: HTTPS image URL; image upload/storage is not provided.
+          nullable: true
+        status:
+          type: string
+          enum: [listed, unlisted]
+          default: listed
+    EnquiryInput:
+      type: object
+      required: [submissionKey, customerName, email, subject, message]
+      properties:
+        submissionKey:
+          type: string
+          format: uuid
+        customerName:
+          type: string
+          minLength: 2
+          maxLength: 80
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        phone:
+          type: string
+          maxLength: 30
+        subject:
+          type: string
+          minLength: 3
+          maxLength: 120
+        message:
+          type: string
+          minLength: 10
+          maxLength: 4000
+        vehicleId:
+          type: string
+          format: uuid
           nullable: true

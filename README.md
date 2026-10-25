@@ -1,11 +1,15 @@
 # Apex Auto — Car Dealership Inventory
 
-A full-stack dealership inventory app with a Stitch-inspired, responsive React storefront, an authenticated REST API, and a persistent SQLite database. Shoppers can browse and filter vehicles and purchase available stock; administrators can maintain the catalog.
+A full-stack dealership website with a public vehicle catalogue and enquiry form, a role-based customer showroom, an administrator dashboard, an authenticated REST API, and persistent SQLite storage.
 
 ## Features
 
 - Create an account, sign in, and access protected endpoints with expiring JWTs.
-- Browse all inventory, including sold-out vehicles, and filter by make, model, category, and price range.
+- Browse the public landing page, searchable listed inventory, and vehicle detail pages without an account.
+- Submit general or vehicle-specific enquiries as a guest or signed-in customer.
+- Use the protected showroom to explore listed stock and the administrator workspace to manage all inventory.
+- Review live inventory metrics and process/search paginated customer enquiries from the administrator dashboard.
+- Hide unlisted vehicles from customer catalogue, detail, AI recommendation, comparison, and purchase routes.
 - Sort and paginate inventory results from the database.
 - Purchase a vehicle with an atomic stock decrement and a historical unit-price snapshot; vehicles at zero stock cannot be purchased.
 - Give administrators a separate inventory-management experience for adding, editing, and removing vehicles.
@@ -13,6 +17,7 @@ A full-stack dealership inventory app with a Stitch-inspired, responsive React s
 - Use the Apex Auto navy-and-blue storefront on desktop and mobile, with live API/database readiness and per-request status and timing diagnostics.
 - Navigate the storefront with visible keyboard focus, a skip-to-content link, responsive controls, and keyboard-accessible modal dialogs.
 - Store optional vehicle specifications, while leaving unknown data explicitly unrecorded.
+- Record listing status, variant, description, and secure HTTPS image links. Images must use external persistent hosting; uploads are not implemented.
 - Persist users, inventory, and purchase records in a local SQLite database. Passwords are stored as bcrypt hashes.
 - Upgrade database schema with versioned SQL migrations.
 - Run the React/Tailwind development server and API together, or build a production frontend served by the API.
@@ -41,6 +46,16 @@ npm.cmd run dev
 The React app is at `http://localhost:5173`; its `/api` requests and `/healthz` readiness check are proxied to the API at `http://localhost:3001`. When using a shell where `npm` works directly, the `.cmd` suffix is optional.
 
 The default persistent database is `data\dealership.db`; the API applies versioned migrations at startup. To select a different database file, set `DATABASE_PATH` before starting the API. Migration scripts live in `backend\migrations`; SQLite's `user_version` records the applied schema version. No sample vehicles are seeded automatically; add verified dealership inventory through the administrator account rather than displaying fictional records as live stock.
+
+To inspect local tables and relations, open `data\dealership.db` with [DB Browser for SQLite](https://sqlitebrowser.org/). Use its **Database Structure** tab for tables/indexes and **Browse Data** for records. Back up the database before making schema/data changes and stop the running app before direct edits. Do not expose or commit the database file.
+
+### Website routes and roles
+
+- `/` is the public landing page and listed-vehicle catalogue.
+- `/vehicles/:id` shows a public listing and an enquiry link; `/contact` accepts guest enquiries.
+- `/login` serves customer/admin sign-in. Successful customer sign-in opens `/showroom`; administrator sign-in opens `/admin/dashboard`.
+- `/showroom` is the authenticated customer showroom. `/admin/dashboard` and `/admin/inventory` require administrator access.
+- Registration always creates a customer account. Create/promote the initial administrator using `seed-admin.js` above.
 
 ### Create the first administrator
 
@@ -78,6 +93,8 @@ The Docker image builds the frontend, installs only production dependencies in t
 
 The Compose port is loopback-only by default. If the reverse proxy is on another machine, change the published bind address deliberately and restrict it with the host firewall.
 
+The database is upgraded by SQL migrations at application startup. Before deploying this release to an existing installation, take a verified backup of the persistent database and confirm the host has enough writable space. Tokens issued before the `jti` revocation change are no longer accepted; users must sign in again. Vehicle image URLs must point to an externally hosted, persistent HTTPS resource; no local image upload directory is provided.
+
 ## CI/CD and security
 
 `.github/workflows/ci-cd.yml` runs API tests, an npm vulnerability audit, a production build, a Docker build, a Trivy high/critical image scan, and an HTTP smoke/load test on pull requests and pushes to `main`. Successful pushes to `main` also publish `ghcr.io/raghavkedia05/car-dealership:latest` and a commit-SHA tag using the built-in `GITHUB_TOKEN`.
@@ -107,16 +124,23 @@ API routes use the `/api` prefix; the health endpoint is `/healthz`. Send and re
 | `POST` | `/api/auth/register` | Public | Register with `name`, `email`, and a 12–72-byte `password`. |
 | `POST` | `/api/auth/login` | Public | Sign in with `email` and `password`; returns an 8-hour token and user. |
 | `GET` | `/api/auth/me` | Signed in | Return the current public user profile. |
-| `GET` | `/api/vehicles` | Signed in | List vehicles with filters, sorting, and pagination. |
-| `GET` | `/api/vehicles/search` | Signed in | Filter by optional `make`, `model`, `category`, and price range, with sorting and pagination. |
-| `GET` | `/api/vehicles/:id` | Signed in | Read one vehicle. |
-| `POST` | `/api/vehicles` | Admin | Create a vehicle. |
-| `PUT` | `/api/vehicles/:id` | Admin | Replace a vehicle's make, model, category, price, and quantity. |
+| `POST` | `/api/auth/logout` | Signed in | Revoke the current token. |
+| `GET` | `/api/public/vehicles` | Public | Search listed vehicles by keyword, category, specifications, and price. |
+| `GET` | `/api/public/vehicles/:id` | Public | Read one listed vehicle. |
+| `POST` | `/api/enquiries` | Public / optional account | Submit a general or vehicle-specific enquiry. |
+| `GET` | `/api/vehicles` | Signed in | List inventory; customers see listed vehicles, admins see all. |
+| `GET` | `/api/vehicles/search` | Signed in | Filter inventory with sorting and pagination. |
+| `GET` | `/api/vehicles/:id` | Signed in | Read one visible vehicle. |
+| `POST` | `/api/vehicles` | Admin | Create a vehicle and listing metadata. |
+| `PUT` | `/api/vehicles/:id` | Admin | Update vehicle details, listing status, and image URL. |
 | `DELETE` | `/api/vehicles/:id` | Admin | Remove a vehicle unless historical purchase records exist. Returns `204` or `409`. |
 | `POST` | `/api/vehicles/:id/purchase` | Signed in | Purchase one vehicle, decrement stock, and record the price snapshot atomically. Returns `409` if it is sold out. |
 | `POST` | `/api/vehicles/:id/restock` | Admin | Add a positive integer quantity using `{ "quantity": 5 }`. |
 | `POST` | `/api/ai/car-finder` | Signed in | Interpret a natural-language query and rank available catalog vehicles. |
 | `POST` | `/api/ai/car-finder/compare` | Signed in | Compare up to three current catalog records. |
+| `GET` | `/api/admin/dashboard` | Admin | Read live inventory/enquiry metrics and recent records. |
+| `GET` | `/api/admin/enquiries` | Admin | Search, filter, and paginate customer enquiries. |
+| `PATCH` | `/api/admin/enquiries/:id` | Admin | Update enquiry status. |
 
 The finder works without an AI credential using deterministic, server-side parsing. To opt into OpenAI-compatible interpretation, set `AI_PROVIDER=openai-compatible`, `AI_API_KEY`, and `AI_MODEL` on the server; optionally set `AI_BASE_URL` for a compatible endpoint. The user query is sent to that configured provider. Provider failures fall back to deterministic parsing and are identified in the response. Never put provider credentials in frontend code.
 
@@ -151,7 +175,7 @@ npm.cmd run build
 
 The suite exercises registration and password hashing, login and role protection, invalid input, inventory filtering/sorting/pagination, administrator catalog operations, atomic purchases and price snapshots, restocking, migration versioning, and persistence across SQLite connections.
 
-**Latest verified results:** 34 tests passed, 0 failed, 0 skipped; total measured coverage was 84.45% lines, 76.95% branches, and 90.24% functions. Backend coverage for `app.js` was 95.71% lines, 87.96% branches, and 87.88% functions. `npm.cmd run build` passed and `npm.cmd audit --audit-level=high` reported 0 vulnerabilities.
+**Latest verified results:** 38 tests passed, 0 failed, 0 skipped, and `npm.cmd run build` passed after adding the public catalogue, enquiry, dashboard, and listing-visibility flows. Run the suite/build again after subsequent changes; the previously recorded coverage and audit figures predate these routes.
 
 These figures were recorded from actual commands; they do not imply frontend unit/E2E coverage. Docker is not installed in the current verification environment, so a fresh local image build was not run. See [`docs/testing.md`](docs/testing.md) for scope and limitations and rerun `npm.cmd run test:coverage` for a fresh report.
 
@@ -169,7 +193,7 @@ The development history starts with the API behavior tests, recorded while the A
 
 I used GitHub Copilot through an AI assistant using Copilot SDK in VS Code for implementation, test development, debugging, and documentation. This update adds the natural-language car finder, grounded recommendations and comparisons, optional vehicle specifications, and the one-time USD-to-INR data migration.
 
-The assistant executed the 34-test suite, production frontend build, and a browser smoke check of admin sign-in, vehicle specification entry, INR formatting, live API health, natural-language inventory results, and vehicle comparison against an isolated temporary database. These are tool-executed checks, not a claim that I personally performed an independent review. Before using this for an assignment, I should add the specific code-review and interview-preparation work I personally completed.
+The assistant executed the 39-test suite, production frontend build, dependency audit, and browser checks of customer/admin sign-in destinations, the public catalogue and vehicle enquiry flow, administrator inventory editing, enquiry status changes, and mobile layout against an isolated temporary database. These are tool-executed checks, not a claim that I personally performed an independent review. Before using this for an assignment, I should add the specific code-review and interview-preparation work I personally completed.
 
 [`PROMPTS.md`](PROMPTS.md) preserves the original project brief and earlier supplied prompt. The later AI Car Finder request is not included because its original attachment text was not available in this implementation context; prior assistant responses and chat turns are not reconstructed.
 

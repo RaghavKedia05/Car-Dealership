@@ -8,6 +8,7 @@ const migrations = [
   '002_purchase_records.sql',
   '003_vehicle_specifications.sql',
   '004_convert_usd_prices_to_inr.sql',
+  '005_public_catalog_enquiries.sql',
 ];
 
 function migrate(db) {

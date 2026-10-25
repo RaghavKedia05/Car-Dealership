@@ -36,7 +36,10 @@ async function main() {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    db.prepare('INSERT INTO users (id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)')
+    db.prepare(`
+      INSERT INTO users (id, name, email, password_hash, role, updated_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `)
       .run(randomUUID(), name, email, passwordHash, 'admin');
     console.log(`Administrator account created for ${email}`);
   } finally {

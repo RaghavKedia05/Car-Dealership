@@ -506,8 +506,9 @@ function buildComparison(vehicles, originalQuery = '') {
   };
 }
 
-function queryInventory(db, criteria, relaxedField = null) {
+function queryInventory(db, criteria, relaxedField = null, listedOnly = false) {
   const clauses = ['quantity > 0'];
+  if (listedOnly) clauses.push("status = 'listed'");
   const values = [];
   const filters = {
     make: ['make = ? COLLATE NOCASE', criteria.make],
@@ -533,7 +534,10 @@ function queryInventory(db, criteria, relaxedField = null) {
 }
 
 async function findCars(db, query, options = {}) {
-  const allRows = db.prepare('SELECT make, model, category, body_type, fuel_type, transmission FROM vehicles').all();
+  const allRows = db.prepare(`
+    SELECT make, model, category, body_type, fuel_type, transmission
+    FROM vehicles ${options.listedOnly ? "WHERE status = 'listed'" : ''}
+  `).all();
   const parsed = await parseCriteria(query, { providerParser: options.providerParser });
   if (parsed.parser === 'deterministic') {
     parsed.criteria = parseNaturalQuery(query, allRows);
@@ -555,10 +559,14 @@ async function findCars(db, query, options = {}) {
     };
   }
 
-  const exact = recommendVehicles(criteria, queryInventory(db, criteria));
+  const exact = recommendVehicles(criteria, queryInventory(db, criteria, null, options.listedOnly));
   const alternatives = [];
   if (!exact.matches.length) {
-    const available = db.prepare('SELECT * FROM vehicles WHERE quantity > 0 ORDER BY price ASC, id ASC LIMIT 500').all();
+    const available = db.prepare(`
+      SELECT * FROM vehicles WHERE quantity > 0
+      ${options.listedOnly ? "AND status = 'listed'" : ''}
+      ORDER BY price ASC, id ASC LIMIT 500
+    `).all();
     alternatives.push(...generateAlternatives(criteria, available));
   }
   const filters = criteria.mustHave || [];
