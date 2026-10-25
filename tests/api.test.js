@@ -3,6 +3,7 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { DatabaseSync } = require('node:sqlite');
 const test = require('node:test');
 const request = require('supertest');
 const { createApp } = require('../backend/app');
@@ -246,6 +247,31 @@ test('users can list and filter vehicles by text, category, and price', async (t
   assert.equal(filtered.body.vehicles[0].model, 'XC60');
 });
 
+test('vehicle listing supports validated sorting and pagination', async (t) => {
+  const { app, adminToken, userToken, close } = await createTestContext();
+  t.after(close);
+
+  await addVehicle(app, adminToken, vehicle({ model: 'XC90', price: 51000 }));
+  await addVehicle(app, adminToken, vehicle({ make: 'Toyota', model: 'RAV4', price: 35000 }));
+  await addVehicle(app, adminToken, vehicle({ make: 'Honda', model: 'CR-V', price: 39000 }));
+
+  const firstPage = await request(app)
+    .get('/api/vehicles?page=1&pageSize=2&sortBy=price&sortOrder=asc')
+    .set(withToken(userToken));
+  const secondPage = await request(app)
+    .get('/api/vehicles?page=2&pageSize=2&sortBy=price&sortOrder=asc')
+    .set(withToken(userToken));
+  const invalidPage = await request(app)
+    .get('/api/vehicles?pageSize=101')
+    .set(withToken(userToken));
+
+  assert.equal(firstPage.status, 200);
+  assert.deepEqual(firstPage.body.vehicles.map((item) => item.price), [35000, 39000]);
+  assert.deepEqual(firstPage.body.pagination, { page: 1, pageSize: 2, total: 3, totalPages: 2 });
+  assert.deepEqual(secondPage.body.vehicles.map((item) => item.price), [51000]);
+  assert.equal(invalidPage.status, 400);
+});
+
 test('purchasing decrements available quantity and prevents overselling', async (t) => {
   const { app, adminToken, userToken, close } = await createTestContext();
   t.after(close);
@@ -296,4 +322,126 @@ test('vehicle inventory persists in a file-backed SQLite database', (t) => {
   secondConnection.close();
 
   assert.deepEqual({ ...saved }, { make: 'Volvo', model: 'XC60', quantity: 3 });
+});
+
+test('database schema changes are tracked and applied as migrations', (t) => {
+  const db = createDatabase(':memory:');
+  t.after(() => db.close());
+
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 2);
+  assert.equal(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'purchases'").get().name, 'purchases');
+});
+
+test('migrations upgrade an existing database without losing its inventory', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dealership-upgrade-'));
+  const filename = path.join(directory, 'legacy.sqlite');
+  let upgraded;
+  t.after(() => {
+    if (upgraded) upgraded.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  });
+
+  const legacy = new DatabaseSync(filename);
+  legacy.exec(`
+    CREATE TABLE users (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE vehicles (
+      id TEXT PRIMARY KEY, make TEXT NOT NULL, model TEXT NOT NULL, category TEXT NOT NULL,
+      price REAL NOT NULL, quantity INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    INSERT INTO vehicles (id, make, model, category, price, quantity)
+    VALUES ('legacy-vehicle', 'Volvo', 'XC60', 'SUV', 42000, 3);
+  `);
+  legacy.close();
+
+  upgraded = createDatabase(filename);
+  const saved = upgraded.prepare('SELECT make, quantity FROM vehicles WHERE id = ?').get('legacy-vehicle');
+
+  assert.equal(upgraded.prepare('PRAGMA user_version').get().user_version, 2);
+  assert.deepEqual({ ...saved }, { make: 'Volvo', quantity: 3 });
+  assert.equal(upgraded.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'purchases'").get().name, 'purchases');
+});
+
+test('authenticated users can retrieve their public account profile', async (t) => {
+  const { app, userToken, close } = await createTestContext();
+  t.after(close);
+
+  const response = await request(app).get('/api/auth/me').set(withToken(userToken));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body.user, {
+    id: response.body.user.id,
+    name: 'Taylor Driver',
+    email: 'taylor@example.com',
+    role: 'user',
+  });
+  assert.equal('password_hash' in response.body.user, false);
+});
+
+test('a purchase creates an immutable price snapshot and prevents deleting its vehicle', async (t) => {
+  const { app, db, adminToken, userToken, close } = await createTestContext();
+  t.after(close);
+
+  const created = await addVehicle(app, adminToken, vehicle({ price: 42000, quantity: 1 }));
+  const purchaseResponse = await request(app)
+    .post(`/api/vehicles/${created.body.vehicle.id}/purchase`)
+    .set(withToken(userToken));
+
+  assert.equal(purchaseResponse.status, 200);
+  assert.equal(purchaseResponse.body.purchase.unitPrice, 42000);
+  assert.equal(purchaseResponse.body.purchase.totalAmount, 42000);
+  assert.equal(purchaseResponse.body.purchase.quantity, 1);
+
+  await request(app).put(`/api/vehicles/${created.body.vehicle.id}`)
+    .set(withToken(adminToken)).send(vehicle({ price: 48000, quantity: 2 }));
+  const purchase = db.prepare('SELECT unit_price, total_amount, quantity FROM purchases WHERE vehicle_id = ?')
+    .get(created.body.vehicle.id);
+  assert.deepEqual({ ...purchase }, { unit_price: 42000, total_amount: 42000, quantity: 1 });
+
+  const deleted = await request(app).delete(`/api/vehicles/${created.body.vehicle.id}`)
+    .set(withToken(adminToken));
+  assert.equal(deleted.status, 409);
+});
+
+test('failed and concurrent purchases do not oversell or create extra purchase records', async (t) => {
+  const { app, db, adminToken, userToken, close } = await createTestContext();
+  t.after(close);
+
+  const created = await addVehicle(app, adminToken, vehicle({ quantity: 1 }));
+  const url = `/api/vehicles/${created.body.vehicle.id}/purchase`;
+  const responses = await Promise.all([
+    request(app).post(url).set(withToken(userToken)),
+    request(app).post(url).set(withToken(userToken)),
+  ]);
+
+  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 409]);
+  assert.equal(db.prepare('SELECT quantity FROM vehicles WHERE id = ?').get(created.body.vehicle.id).quantity, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM purchases WHERE vehicle_id = ?')
+    .get(created.body.vehicle.id).count, 1);
+});
+
+test('purchase transaction rolls back inventory when writing its audit record fails', async (t) => {
+  const { app, db, adminToken, userToken, close } = await createTestContext();
+  t.after(close);
+
+  const created = await addVehicle(app, adminToken, vehicle({ quantity: 1 }));
+  db.exec(`
+    CREATE TRIGGER reject_purchase_record
+    BEFORE INSERT ON purchases
+    BEGIN
+      SELECT RAISE(ABORT, 'simulated purchase record failure');
+    END;
+  `);
+
+  const response = await request(app)
+    .post(`/api/vehicles/${created.body.vehicle.id}/purchase`)
+    .set(withToken(userToken));
+
+  assert.equal(response.status, 500);
+  assert.equal(db.prepare('SELECT quantity FROM vehicles WHERE id = ?').get(created.body.vehicle.id).quantity, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM purchases').get().count, 0);
 });
