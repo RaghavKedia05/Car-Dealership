@@ -21,6 +21,7 @@ COPY --chown=node:node package.json ./package.json
 COPY --chown=node:node backend ./backend
 COPY --from=build --chown=node:node /app/dist ./dist
 RUN mkdir -p /app/data && chown node:node /app/data
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 USER node
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
