@@ -89,12 +89,18 @@ button { color: inherit; }
 .price-range input { width: 48px; padding: 0; border: 0; outline: 0; background: transparent; color: #e5e1d8; font-size: 10px; }
 .price-range input::-webkit-outer-spin-button, .price-range input::-webkit-inner-spin-button { appearance: none; margin: 0; }
 .clear-filters { padding: 6px; border: 0; background: transparent; color: #c49b63; font-size: 10px; cursor: pointer; }
+.sort-field { height: 37px; display: flex; align-items: center; gap: 7px; padding: 0 9px; border: 1px solid #ffffff10; background: #141512; color: #b99a6c; font-size: 8px; letter-spacing: .09em; }
+.sort-field select { max-width: 90px; border: 0; outline: 0; background: transparent; color: #d3d0c6; font-size: 10px; cursor: pointer; }
+.sort-field option { background: #1c1d19; }
+.sort-order { min-height: 34px; padding: 0 8px; border: 1px solid #ffffff15; background: transparent; color: #c9c4b8; font-size: 9px; white-space: nowrap; cursor: pointer; }
+.sort-order:hover, .inventory-pagination button:not(:disabled):hover { border-color: #b89a6b; color: #d0ae7b; }
 .add-vehicle { flex: none; height: 37px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border: 1px solid #b99664; background: #b99664; color: #191916; font-size: 10px; font-weight: 600; cursor: pointer; transition: .2s; }
 .add-vehicle:hover { background: #d1b17f; }
 .filter-toggle { display: none; }
 .notice { display: flex; align-items: center; gap: 9px; margin: -8px 0 19px; padding: 11px 13px; border: 1px solid; font-size: 11px; }
 .notice svg { flex: none; }
 .notice-error { border-color: #bb69594d; color: #e3a092; background: #a5382910; }
+.notice-error button { margin-left: auto; border: 1px solid #bb69594d; padding: 6px 10px; background: transparent; color: inherit; font-size: 10px; cursor: pointer; }
 .notice-success { border-color: #8eb78c38; color: #b1d2a7; background: #59754d17; }
 .notice-success button { margin-left: auto; border: 0; background: transparent; color: inherit; cursor: pointer; }
 .vehicle-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
@@ -133,6 +139,10 @@ button { color: inherit; }
 .vehicle-admin-actions button:last-child:hover { color: #e39887; }
 .inventory-note { margin: 20px 0 0; display: flex; align-items: center; justify-content: center; gap: 7px; color: #77756d; font-size: 9px; }
 .inventory-note svg { color: #a68b62; }
+.inventory-pagination { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 26px; padding-top: 14px; border-top: 1px solid #ffffff10; color: #aaa69b; font-size: 10px; }
+.inventory-pagination > div { display: flex; align-items: center; gap: 12px; }
+.inventory-pagination button { min-height: 34px; padding: 0 11px; border: 1px solid #ffffff1c; background: transparent; color: #d6d0c3; font-size: 10px; cursor: pointer; }
+.inventory-pagination button:disabled { color: #68665f; cursor: not-allowed; }
 .empty-state { min-height: 275px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #ffffff11; background: #1b1c18; text-align: center; }
 .empty-icon { width: 48px; height: 48px; margin-bottom: 15px; display: grid; place-items: center; border: 1px solid #c49b6359; color: #c49b63; }
 .empty-state h3 { margin: 0; font-family: Georgia, serif; font-size: 22px; font-weight: 400; }
@@ -210,6 +220,8 @@ button { color: inherit; }
   .select-field { flex: 1 1 140px; }
   .price-range { flex: 1 1 175px; }
   .price-range input { width: 54px; }
+  .sort-field { flex: 1 1 130px; }
+  .sort-order { flex: 1 1 120px; }
   .account-section { grid-template-columns: .85fr 1.15fr; }
 }
 
@@ -247,6 +259,9 @@ button { color: inherit; }
   .select-field { flex: 1 1 calc(50% - 5px); }
   .price-range { flex: 1 1 calc(50% - 5px); gap: 5px; }
   .price-range input { width: 40px; }
+  .sort-field { flex: 1 1 calc(50% - 5px); }
+  .sort-field select { max-width: none; flex: 1; }
+  .sort-order { flex: 1 1 calc(50% - 5px); }
   .add-vehicle { flex: 1; }
   .vehicle-grid { grid-template-columns: 1fr; gap: 12px; }
   .vehicle-artwork { height: 190px; }
@@ -267,4 +282,6 @@ button { color: inherit; }
   .footer-brand { min-width: auto; }
   .site-footer > span:last-child { font-size: 6px; }
   .vehicle-editor { padding: 22px 18px; }
+  .inventory-pagination { align-items: flex-start; flex-direction: column; }
+  .inventory-pagination > div { width: 100%; justify-content: space-between; }
 }

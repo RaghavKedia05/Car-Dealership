@@ -6,9 +6,11 @@ A full-stack dealership inventory app with a responsive React storefront, an aut
 
 - Create an account, sign in, and access protected endpoints with expiring JWTs.
 - Browse all inventory, including sold-out vehicles, and filter by make, model, category, and price range.
-- Reserve a vehicle; its stock is decremented atomically, and vehicles at zero stock cannot be purchased.
+- Sort and paginate inventory results from the database.
+- Purchase a vehicle with an atomic stock decrement and a historical unit-price snapshot; vehicles at zero stock cannot be purchased.
 - Give administrators a separate inventory-management experience for adding, editing, and removing vehicles.
-- Persist users and vehicle inventory in a local SQLite database. Passwords are stored as bcrypt hashes.
+- Persist users, inventory, and purchase records in a local SQLite database. Passwords are stored as bcrypt hashes.
+- Upgrade database schema with versioned SQL migrations.
 - Run the React/Tailwind development server and API together, or build a production frontend served by the API.
 
 ## Technology
@@ -32,7 +34,7 @@ npm.cmd run dev
 
 The React app is at `http://localhost:5173`; its `/api` requests are proxied to the API at `http://localhost:3001`. When using a shell where `npm` works directly, the `.cmd` suffix is optional.
 
-The default persistent database is `data\dealership.db`; the API creates it on its first start. To select a different database file, set `DATABASE_PATH` before starting the API.
+The default persistent database is `data\dealership.db`; the API applies versioned migrations at startup. To select a different database file, set `DATABASE_PATH` before starting the API. Migration scripts live in `backend\migrations`; SQLite's `user_version` records the applied schema version.
 
 ### Create the first administrator
 
@@ -92,19 +94,20 @@ The script reports requests/second, p50/p95/p99 latency, and failures; it fails 
 
 ## API
 
-All endpoints use the `/api` prefix. Send and receive JSON. Except for registration and login, endpoints require `Authorization: Bearer <token>`.
+API routes use the `/api` prefix; the health endpoint is `/healthz`. Send and receive JSON. Except for registration and login, routes require a bearer access token. The full endpoint contract is in [`docs/api.md`](docs/api.md), with an OpenAPI 3.0 file at [`docs/openapi.yaml`](docs/openapi.yaml).
 
 | Method | Endpoint | Access | Purpose |
 | --- | --- | --- | --- |
 | `POST` | `/api/auth/register` | Public | Register with `name`, `email`, and a 12–72-byte `password`. |
 | `POST` | `/api/auth/login` | Public | Sign in with `email` and `password`; returns an 8-hour token and user. |
-| `GET` | `/api/vehicles` | Signed in | List all vehicles, including vehicles with no stock. |
-| `GET` | `/api/vehicles/search` | Signed in | Filter by optional `make`, `model`, `category`, `minPrice`, and `maxPrice`. |
+| `GET` | `/api/auth/me` | Signed in | Return the current public user profile. |
+| `GET` | `/api/vehicles` | Signed in | List vehicles with filters, sorting, and pagination. |
+| `GET` | `/api/vehicles/search` | Signed in | Filter by optional `make`, `model`, `category`, and price range, with sorting and pagination. |
 | `GET` | `/api/vehicles/:id` | Signed in | Read one vehicle. |
 | `POST` | `/api/vehicles` | Admin | Create a vehicle. |
 | `PUT` | `/api/vehicles/:id` | Admin | Replace a vehicle's make, model, category, price, and quantity. |
-| `DELETE` | `/api/vehicles/:id` | Admin | Remove a vehicle. Returns `204` on success. |
-| `POST` | `/api/vehicles/:id/purchase` | Signed in | Reserve one vehicle and decrement stock. Returns `409` if it is sold out. |
+| `DELETE` | `/api/vehicles/:id` | Admin | Remove a vehicle unless historical purchase records exist. Returns `204` or `409`. |
+| `POST` | `/api/vehicles/:id/purchase` | Signed in | Purchase one vehicle, decrement stock, and record the price snapshot atomically. Returns `409` if it is sold out. |
 | `POST` | `/api/vehicles/:id/restock` | Admin | Add a positive integer quantity using `{ "quantity": 5 }`. |
 
 Example search:
@@ -114,6 +117,8 @@ GET /api/vehicles/search?make=Volvo&category=SUV&minPrice=25000&maxPrice=60000
 ```
 
 A vehicle has a server-generated UUID `id`, non-empty `make`, `model`, and `category`, positive numeric `price`, and non-negative integer `quantity`. Invalid input returns `400`, unauthenticated requests return `401`, and insufficient privileges return `403`.
+
+This remains the established Node/Express + React + SQLite application rather than being rewritten to FastAPI/PostgreSQL: the existing implementation and deployment are built around this stack, and a wholesale replacement would risk losing verified behavior. See [`docs/architecture.md`](docs/architecture.md) for trade-offs and limitations.
 
 ## Screenshots
 
@@ -134,11 +139,11 @@ npm.cmd test
 npm.cmd run build
 ```
 
-The suite exercises registration and password hashing, login and role protection, invalid input, authenticated inventory access and filtering, administrator catalog operations, purchases and stock limits, restocking, and persistence across SQLite connections. A browser smoke check also covered account registration/sign-in, administrator vehicle creation, the shopper search and purchase flows, and sold-out button disabling.
+The suite exercises registration and password hashing, login and role protection, invalid input, inventory filtering/sorting/pagination, administrator catalog operations, atomic purchases and price snapshots, restocking, migration versioning, and persistence across SQLite connections.
 
-**Latest test report:** `npm.cmd test` — 10 tests passed, 0 failed.  
-**Latest coverage report:** 93.37% lines, 80.00% branches, and 84.62% functions.  
-**Production build:** `npm.cmd run build` — passed.
+**Latest verified results:** 20 tests passed, 0 failed, 0 skipped; total measured coverage was 86.96% lines, 76.60% branches, and 83.87% functions. Backend-only coverage for `app.js` was 94.26% lines, 82.28% branches, and 88.89% functions. `npm.cmd run build` passed and `npm.cmd audit --audit-level=high` reported 0 vulnerabilities.
+
+These figures were recorded from actual commands; they do not imply frontend unit/E2E coverage. Docker is not installed in the current verification environment, so a fresh local image build was not run. See [`docs/testing.md`](docs/testing.md) for scope and limitations and rerun `npm.cmd run test:coverage` for a fresh report.
 
 Collect Node's built-in coverage summary with:
 

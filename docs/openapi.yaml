@@ -1,0 +1,302 @@
+openapi: 3.0.3
+info:
+  title: Northline Motors Inventory API
+  version: 1.0.0
+  description: REST API for authenticated dealership inventory and purchases.
+servers:
+  - url: /api
+security:
+  - bearerAuth: []
+paths:
+  /auth/register:
+    post:
+      security: []
+      summary: Register a customer account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Registration'
+      responses:
+        '201':
+          description: Account created
+        '400':
+          description: Invalid request
+        '409':
+          description: Email is already registered
+  /auth/login:
+    post:
+      security: []
+      summary: Sign in and obtain an access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Access token and public user
+        '401':
+          description: Invalid credentials
+  /auth/me:
+    get:
+      summary: Get the authenticated user
+      responses:
+        '200':
+          description: Public user profile
+        '401':
+          description: Missing or invalid token
+  /vehicles:
+    get:
+      summary: List inventory with filters, sorting, and pagination
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [make, model, category, price, createdAt]
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: make
+          in: query
+          schema:
+            type: string
+        - name: model
+          in: query
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: minPrice
+          in: query
+          schema:
+            type: number
+            minimum: 0
+        - name: maxPrice
+          in: query
+          schema:
+            type: number
+            minimum: 0
+      responses:
+        '200':
+          description: Inventory page
+        '400':
+          description: Invalid filter or pagination value
+        '401':
+          description: Authentication required
+    post:
+      summary: Create a vehicle (administrator)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleInput'
+      responses:
+        '201':
+          description: Vehicle created
+        '403':
+          description: Administrator access required
+  /vehicles/search:
+    get:
+      summary: Search inventory (same filters as GET /vehicles)
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [make, model, category, price, createdAt]
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: make
+          in: query
+          schema:
+            type: string
+        - name: model
+          in: query
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: minPrice
+          in: query
+          schema:
+            type: number
+            minimum: 0
+        - name: maxPrice
+          in: query
+          schema:
+            type: number
+            minimum: 0
+      responses:
+        '200':
+          description: Filtered inventory page
+        '400':
+          description: Invalid search range
+  /vehicles/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      summary: Get one vehicle
+      responses:
+        '200':
+          description: Vehicle details
+        '404':
+          description: Vehicle not found
+    put:
+      summary: Replace vehicle fields (administrator)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleInput'
+      responses:
+        '200':
+          description: Updated vehicle
+        '403':
+          description: Administrator access required
+        '404':
+          description: Vehicle not found
+    delete:
+      summary: Delete vehicle (administrator; blocked if purchased)
+      responses:
+        '204':
+          description: Vehicle deleted
+        '403':
+          description: Administrator access required
+        '404':
+          description: Vehicle not found
+        '409':
+          description: Purchase history prevents deletion
+  /vehicles/{id}/purchase:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    post:
+      summary: Purchase one unit and record its price snapshot
+      responses:
+        '200':
+          description: Updated vehicle and purchase record
+        '404':
+          description: Vehicle not found
+        '409':
+          description: Vehicle is out of stock
+  /vehicles/{id}/restock:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    post:
+      summary: Restock a vehicle (administrator)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              properties:
+                quantity:
+                  type: integer
+                  minimum: 1
+                  maximum: 1000000
+      responses:
+        '200':
+          description: Updated vehicle
+        '400':
+          description: Invalid restock amount
+        '403':
+          description: Administrator access required
+        '404':
+          description: Vehicle not found
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    pageSize:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 12
+  schemas:
+    Registration:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 12
+          maxLength: 72
+    VehicleInput:
+      type: object
+      required: [make, model, category, price, quantity]
+      properties:
+        make:
+          type: string
+          minLength: 1
+          maxLength: 60
+        model:
+          type: string
+          minLength: 1
+          maxLength: 60
+        category:
+          type: string
+          minLength: 1
+          maxLength: 40
+        price:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+        quantity:
+          type: integer
+          minimum: 0
+          maximum: 1000000

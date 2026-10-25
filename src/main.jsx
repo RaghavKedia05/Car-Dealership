@@ -58,6 +58,11 @@ function App() {
   const [category, setCategory] = useState('');
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 9, total: 0, totalPages: 0 });
+  const [refreshKey, setRefreshKey] = useState(0);
   const [editor, setEditor] = useState(null);
   const [mobileFilters, setMobileFilters] = useState(false);
   const isAdmin = session?.user.role === 'admin';
@@ -89,15 +94,22 @@ function App() {
     if (category) search.set('category', category);
     if (minPrice) search.set('minPrice', minPrice);
     if (maxPrice) search.set('maxPrice', maxPrice);
+    search.set('page', String(page));
+    search.set('pageSize', String(pagination.pageSize));
+    search.set('sortBy', sortBy);
+    search.set('sortOrder', sortOrder);
     const query = search.toString();
-    const endpoint = query ? `/api/vehicles/search?${query}` : '/api/vehicles';
+    const endpoint = `/api/vehicles/search?${query}`;
     let active = true;
     const timer = window.setTimeout(async () => {
       setLoading(true);
       setError('');
       try {
         const result = await api(endpoint);
-        if (active) setVehicles(result.vehicles);
+        if (active) {
+          setVehicles(result.vehicles);
+          setPagination(result.pagination);
+        }
       } catch (requestError) {
         if (active) {
           setError(requestError.message);
@@ -112,7 +124,11 @@ function App() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [session, make, model, category, minPrice, maxPrice]);
+  }, [session, make, model, category, minPrice, maxPrice, page, pagination.pageSize, sortBy, sortOrder, refreshKey]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [make, model, category, minPrice, maxPrice, sortBy, sortOrder]);
 
   function saveSession(nextSession) {
     localStorage.setItem('northline-token', nextSession.token);
@@ -137,6 +153,7 @@ function App() {
     try {
       const result = await api(`/api/vehicles/${vehicle.id}/purchase`, { method: 'POST' });
       setVehicles((current) => current.map((item) => item.id === vehicle.id ? result.vehicle : item));
+      setRefreshKey((current) => current + 1);
       setNotice(`${vehicle.make} ${vehicle.model} purchased. Inventory has been updated.`);
     } catch (requestError) {
       setError(requestError.message);
@@ -168,6 +185,7 @@ function App() {
       setVehicles((current) => editing
         ? current.map((item) => item.id === result.vehicle.id ? result.vehicle : item)
         : [result.vehicle, ...current]);
+      setRefreshKey((current) => current + 1);
       setEditor(null);
       setNotice(editing ? 'Vehicle details updated.' : 'New vehicle added to the showroom.');
     } catch (requestError) {
@@ -185,6 +203,9 @@ function App() {
     try {
       await api(`/api/vehicles/${vehicle.id}`, { method: 'DELETE' });
       setVehicles((current) => current.filter((item) => item.id !== vehicle.id));
+      const remainingPages = Math.ceil((pagination.total - 1) / pagination.pageSize);
+      if (page > Math.max(remainingPages, 1)) setPage(Math.max(remainingPages, 1));
+      setRefreshKey((current) => current + 1);
       setNotice(`${vehicle.make} ${vehicle.model} was removed from the inventory.`);
     } catch (requestError) {
       setError(requestError.message);
@@ -268,7 +289,7 @@ function App() {
             </div>
             {session && (
               <div className="collection-meta">
-                <span className="inventory-count">{loading ? '…' : String(vehicles.length).padStart(2, '0')}</span>
+                <span className="inventory-count">{loading ? '…' : String(pagination.total).padStart(2, '0')}</span>
                 <span>CURATED VEHICLES</span>
               </div>
             )}
@@ -300,6 +321,23 @@ function App() {
                     <Minus size={13} />
                     <input aria-label="Maximum price" inputMode="numeric" placeholder="Max" type="number" min="0" value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} />
                   </div>
+                  <label className="sort-field">
+                    <span>SORT</span>
+                    <select aria-label="Sort vehicles by" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+                      <option value="createdAt">Newest</option>
+                      <option value="make">Make</option>
+                      <option value="model">Model</option>
+                      <option value="price">Price</option>
+                    </select>
+                  </label>
+                  <button
+                    className="sort-order"
+                    type="button"
+                    onClick={() => setSortOrder((current) => current === 'asc' ? 'desc' : 'asc')}
+                    aria-label={`Sort ${sortOrder === 'asc' ? 'descending' : 'ascending'}`}
+                  >
+                    {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                  </button>
                   {hasFilters && <button className="clear-filters" type="button" onClick={clearFilters}>Clear</button>}
                 </div>
                 <button className="filter-toggle" type="button" onClick={() => setMobileFilters(!mobileFilters)} aria-expanded={mobileFilters}>
@@ -312,7 +350,12 @@ function App() {
                 )}
               </div>
 
-              {error && <div className="notice notice-error" role="alert"><CircleHelp size={17} /> {error}</div>}
+              {error && (
+                <div className="notice notice-error" role="alert">
+                  <CircleHelp size={17} /> {error}
+                  <button type="button" onClick={() => setRefreshKey((current) => current + 1)}>Retry</button>
+                </div>
+              )}
               {notice && <div className="notice notice-success" role="status"><Check size={17} /> {notice}<button type="button" aria-label="Dismiss notification" onClick={() => setNotice('')}><X size={15} /></button></div>}
 
               {loading && !vehicles.length ? (
@@ -346,6 +389,31 @@ function App() {
                   <p>{hasFilters ? 'Try widening your search or clearing a filter.' : 'Check back soon for thoughtfully sourced arrivals.'}</p>
                   {hasFilters && <button className="text-action" type="button" onClick={clearFilters}>Clear all filters <ArrowUpRight size={15} /></button>}
                 </div>
+              )}
+              {pagination.total > 0 && (
+                <nav className="inventory-pagination" aria-label="Inventory pages">
+                  <span>
+                    Showing {(pagination.page - 1) * pagination.pageSize + 1}–
+                    {Math.min(pagination.page * pagination.pageSize, pagination.total)} of {pagination.total}
+                  </span>
+                  <div>
+                    <button
+                      type="button"
+                      disabled={page <= 1 || loading}
+                      onClick={() => setPage((current) => current - 1)}
+                    >
+                      Previous
+                    </button>
+                    <span>Page {pagination.page} of {Math.max(pagination.totalPages, 1)}</span>
+                    <button
+                      type="button"
+                      disabled={page >= pagination.totalPages || loading}
+                      onClick={() => setPage((current) => current + 1)}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </nav>
               )}
               <p className="inventory-note"><LockKeyhole size={13} /> Stock updates as purchases are made · Live inventory</p>
             </>

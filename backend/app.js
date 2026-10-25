@@ -31,12 +31,16 @@ const vehicleSchema = z.object({
   quantity: z.number().int().min(0).max(1_000_000),
 });
 
-const searchSchema = z.object({
+const vehicleQuerySchema = z.object({
   make: z.string().trim().max(60).optional(),
   model: z.string().trim().max(60).optional(),
   category: z.string().trim().max(40).optional(),
   minPrice: z.coerce.number().finite().min(0).optional(),
   maxPrice: z.coerce.number().finite().min(0).optional(),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(12),
+  sortBy: z.enum(['make', 'model', 'category', 'price', 'createdAt']).default('createdAt'),
+  sortOrder: z.enum(['asc', 'desc']).default('desc'),
 }).refine(
   ({ minPrice, maxPrice }) => minPrice === undefined || maxPrice === undefined || minPrice <= maxPrice,
   { message: 'minPrice must not exceed maxPrice' },
@@ -133,6 +137,10 @@ function createApp({ db, jwtSecret = process.env.JWT_SECRET, authRateLimit = {} 
     next();
   };
 
+  app.get('/api/auth/me', requireAuth, (req, res) => {
+    return res.json({ user: publicUser(req.user) });
+  });
+
   app.post('/api/auth/register', authLimiter, async (req, res) => {
     const input = validate(registrationSchema, req.body, res);
     if (!input) return;
@@ -171,8 +179,8 @@ function createApp({ db, jwtSecret = process.env.JWT_SECRET, authRateLimit = {} 
     return res.json({ token, user: publicUser(user) });
   });
 
-  app.get('/api/vehicles/search', requireAuth, (req, res) => {
-    const filters = validate(searchSchema, req.query, res);
+  function listVehicles(req, res) {
+    const filters = validate(vehicleQuerySchema, req.query, res);
     if (!filters) return;
 
     const conditions = [];
@@ -193,14 +201,34 @@ function createApp({ db, jwtSecret = process.env.JWT_SECRET, authRateLimit = {} 
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const rows = db.prepare(`SELECT * FROM vehicles ${where} ORDER BY created_at DESC, id ASC`).all(...values);
-    return res.json({ vehicles: rows.map(toVehicle) });
-  });
+    const columns = {
+      make: 'make',
+      model: 'model',
+      category: 'category',
+      price: 'price',
+      createdAt: 'created_at',
+    };
+    const order = filters.sortOrder === 'asc' ? 'ASC' : 'DESC';
+    const offset = (filters.page - 1) * filters.pageSize;
+    const total = db.prepare(`SELECT COUNT(*) AS total FROM vehicles ${where}`).get(...values).total;
+    const rows = db.prepare(`
+      SELECT * FROM vehicles ${where}
+      ORDER BY ${columns[filters.sortBy]} ${order}, id ASC
+      LIMIT ? OFFSET ?
+    `).all(...values, filters.pageSize, offset);
+    return res.json({
+      vehicles: rows.map(toVehicle),
+      pagination: {
+        page: filters.page,
+        pageSize: filters.pageSize,
+        total,
+        totalPages: Math.ceil(total / filters.pageSize),
+      },
+    });
+  }
 
-  app.get('/api/vehicles', requireAuth, (req, res) => {
-    const rows = db.prepare('SELECT * FROM vehicles ORDER BY created_at DESC, id ASC').all();
-    return res.json({ vehicles: rows.map(toVehicle) });
-  });
+  app.get('/api/vehicles/search', requireAuth, listVehicles);
+  app.get('/api/vehicles', requireAuth, listVehicles);
 
   app.get('/api/vehicles/:id', requireAuth, (req, res) => {
     const vehicle = toVehicle(db.prepare('SELECT * FROM vehicles WHERE id = ?').get(req.params.id));
@@ -237,27 +265,59 @@ function createApp({ db, jwtSecret = process.env.JWT_SECRET, authRateLimit = {} 
   });
 
   app.delete('/api/vehicles/:id', requireAuth, requireAdmin, (req, res) => {
+    const hasPurchases = db.prepare('SELECT 1 FROM purchases WHERE vehicle_id = ? LIMIT 1')
+      .get(req.params.id);
+    if (hasPurchases) {
+      return res.status(409).json({ error: 'Vehicle has purchase history and cannot be deleted' });
+    }
+
     const result = db.prepare('DELETE FROM vehicles WHERE id = ?').run(req.params.id);
     if (result.changes === 0) return res.status(404).json({ error: 'Vehicle not found' });
     return res.status(204).end();
   });
 
   app.post('/api/vehicles/:id/purchase', requireAuth, (req, res) => {
-    const result = db.prepare(`
-      UPDATE vehicles
-      SET quantity = quantity - 1, updated_at = datetime('now')
-      WHERE id = ? AND quantity > 0
-    `).run(req.params.id);
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const vehicle = db.prepare('SELECT id, price FROM vehicles WHERE id = ?').get(req.params.id);
+      if (!vehicle) {
+        db.exec('ROLLBACK');
+        return res.status(404).json({ error: 'Vehicle not found' });
+      }
 
-    if (result.changes === 0) {
-      const exists = db.prepare('SELECT 1 FROM vehicles WHERE id = ?').get(req.params.id);
-      return res.status(exists ? 409 : 404).json({
-        error: exists ? 'Vehicle is out of stock' : 'Vehicle not found',
+      const result = db.prepare(`
+        UPDATE vehicles
+        SET quantity = quantity - 1, updated_at = datetime('now')
+        WHERE id = ? AND quantity > 0
+      `).run(req.params.id);
+      if (result.changes === 0) {
+        db.exec('ROLLBACK');
+        return res.status(409).json({ error: 'Vehicle is out of stock' });
+      }
+
+      const purchaseId = randomUUID();
+      db.prepare(`
+        INSERT INTO purchases (id, vehicle_id, user_id, quantity, unit_price, total_amount)
+        VALUES (?, ?, ?, 1, ?, ?)
+      `).run(purchaseId, vehicle.id, req.user.id, vehicle.price, vehicle.price);
+      const updatedVehicle = toVehicle(
+        db.prepare('SELECT * FROM vehicles WHERE id = ?').get(req.params.id),
+      );
+      db.exec('COMMIT');
+      return res.json({
+        vehicle: updatedVehicle,
+        purchase: {
+          id: purchaseId,
+          vehicleId: vehicle.id,
+          quantity: 1,
+          unitPrice: vehicle.price,
+          totalAmount: vehicle.price,
+        },
       });
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
     }
-
-    const vehicle = toVehicle(db.prepare('SELECT * FROM vehicles WHERE id = ?').get(req.params.id));
-    return res.json({ vehicle });
   });
 
   app.post('/api/vehicles/:id/restock', requireAuth, requireAdmin, (req, res) => {
