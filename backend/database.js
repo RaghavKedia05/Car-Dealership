@@ -6,6 +6,8 @@ const migrationDirectory = path.join(__dirname, 'migrations');
 const migrations = [
   '001_initial_schema.sql',
   '002_purchase_records.sql',
+  '003_vehicle_specifications.sql',
+  '004_convert_usd_prices_to_inr.sql',
 ];
 
 function migrate(db) {

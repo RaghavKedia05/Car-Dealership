@@ -31,8 +31,8 @@ users 1 ─── * purchases * ─── 1 vehicles
 ```
 
 - `users`: account identity, bcrypt password hash, and `user`/`admin` role.
-- `vehicles`: catalog identity, numeric price, and non-negative quantity.
-- `purchases`: user and vehicle references, purchased quantity, unit-price snapshot, total, and timestamp.
+- `vehicles`: catalog identity, INR price, non-negative quantity, and nullable structured specifications.
+- `purchases`: user and vehicle references, purchased quantity, INR unit-price snapshot, total, and timestamp.
 
 Foreign keys preserve purchase history. A vehicle with a purchase record cannot be deleted; administrators must retain it in the catalog or use a future archival workflow.
 
@@ -40,7 +40,7 @@ Foreign keys preserve purchase history. A vehicle with a purchase record cannot 
 
 Purchasing runs inside a SQLite `BEGIN IMMEDIATE` transaction. The handler reads the vehicle price, conditionally decrements stock only when quantity is positive, and creates the purchase snapshot before committing. On missing/out-of-stock inventory it rolls back; errors are rethrown after rollback. SQLite serializes writers, preventing two requests from purchasing the final unit.
 
-Restock and purchase quantities are constrained both in request validation and SQL. The database schema is upgraded in order using SQLite's `user_version`; each migration and version update are committed atomically.
+Restock and purchase quantities are constrained both in request validation and SQL. The database schema is upgraded in order using SQLite's `user_version`; each migration and version update are committed atomically. Migration 004 converts existing USD prices and purchase snapshots to INR once using the documented 2026-10-25 USD/INR rate.
 
 ## Trade-offs and limitations
 

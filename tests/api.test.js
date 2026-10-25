@@ -228,6 +228,41 @@ test('admins can create, update, and delete vehicles', async (t) => {
   assert.equal(deleted.status, 204);
 });
 
+test('administrators can save optional vehicle specifications and leave unknown values null', async (t) => {
+  const { app, adminToken, close } = await createTestContext();
+  t.after(close);
+
+  const created = await addVehicle(app, adminToken, vehicle({
+    bodyType: 'Compact SUV',
+    year: 2024,
+    fuelType: 'hybrid',
+    transmission: 'automatic',
+    seatingCapacity: 5,
+    mileageKmpl: 18.5,
+    electricRangeKm: null,
+    engineCapacityCc: 1998,
+    groundClearanceMm: 210,
+    safetyFeatures: 'Six airbags, ABS',
+  }));
+
+  assert.equal(created.status, 201);
+  assert.equal(created.body.vehicle.bodyType, 'Compact SUV');
+  assert.equal(created.body.vehicle.year, 2024);
+  assert.equal(created.body.vehicle.fuelType, 'hybrid');
+  assert.equal(created.body.vehicle.mileageKmpl, 18.5);
+  assert.equal(created.body.vehicle.electricRangeKm, null);
+  assert.equal(created.body.vehicle.safetyFeatures, 'Six airbags, ABS');
+
+  const updated = await request(app).put(`/api/vehicles/${created.body.vehicle.id}`)
+    .set(withToken(adminToken))
+    .send(vehicle({ fuelType: 'diesel', seatingCapacity: 7 }));
+
+  assert.equal(updated.status, 200);
+  assert.equal(updated.body.vehicle.fuelType, 'diesel');
+  assert.equal(updated.body.vehicle.seatingCapacity, 7);
+  assert.equal(updated.body.vehicle.bodyType, null);
+});
+
 test('users can list and filter vehicles by text, category, and price', async (t) => {
   const { app, adminToken, userToken, close } = await createTestContext();
   t.after(close);
@@ -328,7 +363,7 @@ test('database schema changes are tracked and applied as migrations', (t) => {
   const db = createDatabase(':memory:');
   t.after(() => db.close());
 
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 2);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 4);
   assert.equal(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'purchases'").get().name, 'purchases');
 });
 
@@ -359,11 +394,45 @@ test('migrations upgrade an existing database without losing its inventory', (t)
   legacy.close();
 
   upgraded = createDatabase(filename);
-  const saved = upgraded.prepare('SELECT make, quantity FROM vehicles WHERE id = ?').get('legacy-vehicle');
+  const saved = upgraded.prepare('SELECT make, quantity, price FROM vehicles WHERE id = ?').get('legacy-vehicle');
 
-  assert.equal(upgraded.prepare('PRAGMA user_version').get().user_version, 2);
-  assert.deepEqual({ ...saved }, { make: 'Volvo', quantity: 3 });
+  assert.equal(upgraded.prepare('PRAGMA user_version').get().user_version, 4);
+  assert.deepEqual({ ...saved }, { make: 'Volvo', quantity: 3, price: 3990061.66 });
   assert.equal(upgraded.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'purchases'").get().name, 'purchases');
+});
+
+test('currency migration converts inventory and purchase snapshots using the recorded USD/INR rate', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dealership-currency-'));
+  const filename = path.join(directory, 'currency.sqlite');
+  let upgraded;
+  t.after(() => {
+    if (upgraded) upgraded.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  });
+
+  const beforeConversion = createDatabase(filename);
+  beforeConversion.exec('PRAGMA user_version = 3');
+  beforeConversion.prepare(`
+    INSERT INTO users (id, name, email, password_hash)
+    VALUES ('currency-user', 'Currency User', 'currency@example.com', 'hash')
+  `).run();
+  beforeConversion.prepare(`
+    INSERT INTO vehicles (id, make, model, category, price, quantity)
+    VALUES ('currency-vehicle', 'Volvo', 'XC60', 'SUV', 42000, 1)
+  `).run();
+  beforeConversion.prepare(`
+    INSERT INTO purchases (id, vehicle_id, user_id, quantity, unit_price, total_amount)
+    VALUES ('currency-purchase', 'currency-vehicle', 'currency-user', 2, 42000, 84000)
+  `).run();
+  beforeConversion.close();
+
+  upgraded = createDatabase(filename);
+  const convertedVehicle = upgraded.prepare('SELECT price FROM vehicles WHERE id = ?').get('currency-vehicle');
+  const convertedPurchase = upgraded.prepare('SELECT unit_price, total_amount FROM purchases WHERE id = ?')
+    .get('currency-purchase');
+
+  assert.equal(convertedVehicle.price, 3990061.66);
+  assert.deepEqual({ ...convertedPurchase }, { unit_price: 3990061.66, total_amount: 7980123.31 });
 });
 
 test('authenticated users can retrieve their public account profile', async (t) => {

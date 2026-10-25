@@ -6,6 +6,12 @@ const { rateLimit } = require('express-rate-limit');
 const helmet = require('helmet');
 const jwt = require('jsonwebtoken');
 const { z, ZodError } = require('zod');
+const {
+  buildComparison,
+  compareRequestSchema,
+  findCars,
+  finderRequestSchema,
+} = require('./ai-car-finder');
 
 const passwordSchema = z.string().min(12).refine(
   (password) => Buffer.byteLength(password, 'utf8') <= 72,
@@ -29,6 +35,16 @@ const vehicleSchema = z.object({
   category: z.string().trim().min(1).max(40),
   price: z.number().finite().positive(),
   quantity: z.number().int().min(0).max(1_000_000),
+  bodyType: z.string().trim().min(1).max(40).nullable().optional(),
+  year: z.number().int().min(1886).max(2100).nullable().optional(),
+  fuelType: z.enum(['petrol', 'diesel', 'electric', 'hybrid', 'cng', 'lpg']).nullable().optional(),
+  transmission: z.enum(['automatic', 'manual']).nullable().optional(),
+  seatingCapacity: z.number().int().min(1).max(20).nullable().optional(),
+  mileageKmpl: z.number().finite().positive().max(200).nullable().optional(),
+  electricRangeKm: z.number().finite().positive().max(3000).nullable().optional(),
+  engineCapacityCc: z.number().int().positive().max(20_000).nullable().optional(),
+  groundClearanceMm: z.number().int().positive().max(1000).nullable().optional(),
+  safetyFeatures: z.string().trim().max(500).nullable().optional(),
 });
 
 const vehicleQuerySchema = z.object({
@@ -65,6 +81,16 @@ function toVehicle(row) {
     quantity: row.quantity,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    bodyType: row.body_type ?? null,
+    year: row.vehicle_year ?? null,
+    fuelType: row.fuel_type ?? null,
+    transmission: row.transmission ?? null,
+    seatingCapacity: row.seating_capacity ?? null,
+    mileageKmpl: row.mileage_kmpl ?? null,
+    electricRangeKm: row.electric_range_km ?? null,
+    engineCapacityCc: row.engine_capacity_cc ?? null,
+    groundClearanceMm: row.ground_clearance_mm ?? null,
+    safetyFeatures: row.safety_features ?? null,
   };
 }
 
@@ -87,7 +113,13 @@ function escapeLike(value) {
   return value.replace(/[\\%_]/g, '\\$&');
 }
 
-function createApp({ db, jwtSecret = process.env.JWT_SECRET, authRateLimit = {} } = {}) {
+function createApp({
+  db,
+  jwtSecret = process.env.JWT_SECRET,
+  authRateLimit = {},
+  aiParser,
+  aiRateLimit = {},
+} = {}) {
   if (!db) throw new Error('A database connection is required');
   if (!jwtSecret) throw new Error('JWT_SECRET must be configured');
 
@@ -103,6 +135,14 @@ function createApp({ db, jwtSecret = process.env.JWT_SECRET, authRateLimit = {} 
     legacyHeaders: false,
     handler: (_req, res) => res.status(429).json({ error: 'Too many authentication attempts' }),
     ...authRateLimit,
+  });
+  const finderLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 10,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    handler: (_req, res) => res.status(429).json({ error: 'Too many AI finder requests' }),
+    ...aiRateLimit,
   });
 
   app.get('/healthz', (_req, res) => {
@@ -139,6 +179,26 @@ function createApp({ db, jwtSecret = process.env.JWT_SECRET, authRateLimit = {} 
 
   app.get('/api/auth/me', requireAuth, (req, res) => {
     return res.json({ user: publicUser(req.user) });
+  });
+
+  app.post('/api/ai/car-finder', requireAuth, finderLimiter, async (req, res) => {
+    const input = validate(finderRequestSchema, req.body, res);
+    if (!input) return;
+    const result = await findCars(db, input.query, { providerParser: aiParser });
+    return res.json(result);
+  });
+
+  app.post('/api/ai/car-finder/compare', requireAuth, finderLimiter, (req, res) => {
+    const input = validate(compareRequestSchema, req.body, res);
+    if (!input) return;
+    const placeholders = input.vehicle_ids.map(() => '?').join(', ');
+    const vehicles = db.prepare(`SELECT * FROM vehicles WHERE id IN (${placeholders})`)
+      .all(...input.vehicle_ids);
+    if (vehicles.length !== input.vehicle_ids.length) {
+      return res.status(404).json({ error: 'One or more selected vehicles were not found' });
+    }
+    const ordered = input.vehicle_ids.map((id) => vehicles.find((vehicle) => vehicle.id === id));
+    return res.json(buildComparison(ordered, input.original_query));
   });
 
   app.post('/api/auth/register', authLimiter, async (req, res) => {
@@ -242,9 +302,17 @@ function createApp({ db, jwtSecret = process.env.JWT_SECRET, authRateLimit = {} 
 
     const id = randomUUID();
     db.prepare(`
-      INSERT INTO vehicles (id, make, model, category, price, quantity)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, input.make, input.model, input.category, input.price, input.quantity);
+      INSERT INTO vehicles (
+        id, make, model, category, price, quantity, body_type, vehicle_year, fuel_type,
+        transmission, seating_capacity, mileage_kmpl, electric_range_km, engine_capacity_cc,
+        ground_clearance_mm, safety_features
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id, input.make, input.model, input.category, input.price, input.quantity,
+      input.bodyType ?? null, input.year ?? null, input.fuelType ?? null, input.transmission ?? null,
+      input.seatingCapacity ?? null, input.mileageKmpl ?? null, input.electricRangeKm ?? null,
+      input.engineCapacityCc ?? null, input.groundClearanceMm ?? null, input.safetyFeatures ?? null,
+    );
     const vehicle = toVehicle(db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id));
     return res.status(201).json({ vehicle });
   });
@@ -255,9 +323,18 @@ function createApp({ db, jwtSecret = process.env.JWT_SECRET, authRateLimit = {} 
 
     const result = db.prepare(`
       UPDATE vehicles
-      SET make = ?, model = ?, category = ?, price = ?, quantity = ?, updated_at = datetime('now')
+      SET make = ?, model = ?, category = ?, price = ?, quantity = ?, body_type = ?,
+          vehicle_year = ?, fuel_type = ?, transmission = ?, seating_capacity = ?, mileage_kmpl = ?,
+          electric_range_km = ?, engine_capacity_cc = ?, ground_clearance_mm = ?, safety_features = ?,
+          updated_at = datetime('now')
       WHERE id = ?
-    `).run(input.make, input.model, input.category, input.price, input.quantity, req.params.id);
+    `).run(
+      input.make, input.model, input.category, input.price, input.quantity, input.bodyType ?? null,
+      input.year ?? null, input.fuelType ?? null, input.transmission ?? null,
+      input.seatingCapacity ?? null, input.mileageKmpl ?? null, input.electricRangeKm ?? null,
+      input.engineCapacityCc ?? null, input.groundClearanceMm ?? null, input.safetyFeatures ?? null,
+      req.params.id,
+    );
     if (result.changes === 0) return res.status(404).json({ error: 'Vehicle not found' });
 
     const vehicle = toVehicle(db.prepare('SELECT * FROM vehicles WHERE id = ?').get(req.params.id));

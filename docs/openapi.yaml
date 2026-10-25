@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
-  title: Northline Motors Inventory API
-  version: 1.0.0
+  title: Northline Motors Dealership API
+  version: 2.0.0
   description: REST API for authenticated dealership inventory and purchases.
 servers:
   - url: /api
@@ -55,6 +55,64 @@ paths:
           description: Public user profile
         '401':
           description: Missing or invalid token
+  /ai/car-finder:
+    post:
+      summary: Interpret a natural-language request and recommend available inventory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query:
+                  type: string
+                  minLength: 3
+                  maxLength: 2000
+                  example: Family SUV under ₹20 lakh with at least five seats
+      responses:
+        '200':
+          description: Interpreted criteria, grounded matches, or one-filter-relaxed alternatives
+        '400':
+          description: Invalid query
+        '401':
+          description: Authentication required
+        '429':
+          description: Finder rate limit exceeded
+  /ai/car-finder/compare:
+    post:
+      summary: Compare current inventory records using recorded specifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vehicle_ids]
+              properties:
+                vehicle_ids:
+                  type: array
+                  minItems: 2
+                  maxItems: 3
+                  uniqueItems: true
+                  items:
+                    type: string
+                    format: uuid
+                original_query:
+                  type: string
+                  maxLength: 2000
+      responses:
+        '200':
+          description: Comparison of current vehicle records and known differences
+        '400':
+          description: Invalid vehicle IDs
+        '401':
+          description: Authentication required
+        '404':
+          description: One or more vehicles were not found
+        '429':
+          description: Finder rate limit exceeded
   /vehicles:
     get:
       summary: List inventory with filters, sorting, and pagination
@@ -296,7 +354,52 @@ components:
           type: number
           minimum: 0
           exclusiveMinimum: true
+          description: Price in Indian rupees (INR)
         quantity:
           type: integer
           minimum: 0
           maximum: 1000000
+        bodyType:
+          type: string
+          maxLength: 40
+          nullable: true
+        year:
+          type: integer
+          minimum: 1886
+          maximum: 2100
+          nullable: true
+        fuelType:
+          type: string
+          enum: [petrol, diesel, electric, hybrid, cng, lpg]
+          nullable: true
+        transmission:
+          type: string
+          enum: [automatic, manual]
+          nullable: true
+        seatingCapacity:
+          type: integer
+          minimum: 1
+          maximum: 20
+          nullable: true
+        mileageKmpl:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          nullable: true
+        electricRangeKm:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          nullable: true
+        engineCapacityCc:
+          type: integer
+          minimum: 1
+          nullable: true
+        groundClearanceMm:
+          type: integer
+          minimum: 1
+          nullable: true
+        safetyFeatures:
+          type: string
+          maxLength: 500
+          nullable: true
