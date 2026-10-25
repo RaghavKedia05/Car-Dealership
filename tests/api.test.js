@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -136,6 +137,60 @@ test('vehicle endpoints require a valid bearer token', async (t) => {
   assert.equal((await request(app).get('/api/vehicles')).status, 401);
   assert.equal((await request(app).get('/api/vehicles/search')).status, 401);
   assert.equal((await request(app).get('/api/vehicles').set(withToken('invalid'))).status, 401);
+});
+
+test('health endpoint exposes readiness and security headers', async (t) => {
+  const { app, close } = await createTestContext();
+  t.after(close);
+
+  const response = await request(app).get('/healthz');
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, { status: 'ok' });
+  assert.equal(response.headers['x-content-type-options'], 'nosniff');
+  assert.equal(response.headers['x-frame-options'], 'SAMEORIGIN');
+  assert.match(response.headers['content-security-policy'], /default-src 'self'/);
+  assert.equal(response.headers['x-powered-by'], undefined);
+});
+
+test('authentication endpoints limit repeated requests', async (t) => {
+  const db = createDatabase(':memory:');
+  const app = createApp({
+    db,
+    jwtSecret: 'test-secret-that-is-long-enough',
+    authRateLimit: { limit: 2, windowMs: 60_000 },
+  });
+  t.after(() => db.close());
+
+  const attempt = () => request(app).post('/api/auth/login').send({
+    email: 'missing@example.com',
+    password: 'incorrect-password',
+  });
+
+  assert.equal((await attempt()).status, 401);
+  assert.equal((await attempt()).status, 401);
+  const limited = await attempt();
+  assert.equal(limited.status, 429);
+  assert.equal(limited.body.error, 'Too many authentication attempts');
+});
+
+test('production server rejects missing or short JWT secrets', () => {
+  for (const jwtSecret of ['', 'short']) {
+    const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'backend', 'server.js')], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        NODE_ENV: 'production',
+        JWT_SECRET: jwtSecret,
+        PORT: '3001',
+        DATABASE_PATH: ':memory:',
+      },
+      timeout: 5000,
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /JWT_SECRET must be configured with at least 32 bytes in production/);
+  }
 });
 
 test('vehicle creation and impossible search ranges reject invalid input', async (t) => {

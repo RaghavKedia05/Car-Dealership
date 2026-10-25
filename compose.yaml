@@ -1,0 +1,36 @@
+services:
+  dealership:
+    build: .
+    image: car-dealership:local
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    ports:
+      - "127.0.0.1:${HOST_PORT:-3001}:3001"
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      DATABASE_PATH: /app/data/dealership.db
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      TRUST_PROXY_HOPS: "${TRUST_PROXY_HOPS:-0}"
+    volumes:
+      - dealership-data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  dealership-data:

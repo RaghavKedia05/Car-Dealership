@@ -1,0 +1,113 @@
+name: CI and container delivery
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build container for validation
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: car-dealership:ci
+
+      - name: Scan container for critical and high vulnerabilities
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: car-dealership:ci
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+      - name: Smoke test and stress-test container
+        shell: bash
+        env:
+          JWT_SECRET: ci-only-secret-that-is-at-least-32-bytes-long
+        run: |
+          docker run --detach --rm --name dealership-ci \
+            --publish 127.0.0.1:3001:3001 \
+            --env JWT_SECRET="$JWT_SECRET" \
+            --volume dealership-ci-data:/app/data \
+            car-dealership:ci
+          cleanup() {
+            docker logs dealership-ci || true
+            docker stop dealership-ci || true
+            docker volume rm dealership-ci-data || true
+          }
+          trap cleanup EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3001/healthz; then
+              break
+            fi
+            sleep 2
+          done
+          curl --fail --silent http://127.0.0.1:3001/healthz
+          npm run stress -- --url http://127.0.0.1:3001 --duration 10 --concurrency 20 --max-p95-ms 3000
+
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/raghavkedia05/car-dealership
+          tags: |
+            type=raw,value=latest
+            type=sha
+
+      - name: Build and publish image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

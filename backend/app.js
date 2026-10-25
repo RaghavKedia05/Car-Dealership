@@ -2,6 +2,8 @@ const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const bcrypt = require('bcryptjs');
 const express = require('express');
+const { rateLimit } = require('express-rate-limit');
+const helmet = require('helmet');
 const jwt = require('jsonwebtoken');
 const { z, ZodError } = require('zod');
 
@@ -81,13 +83,28 @@ function escapeLike(value) {
   return value.replace(/[\\%_]/g, '\\$&');
 }
 
-function createApp({ db, jwtSecret = process.env.JWT_SECRET } = {}) {
+function createApp({ db, jwtSecret = process.env.JWT_SECRET, authRateLimit = {} } = {}) {
   if (!db) throw new Error('A database connection is required');
   if (!jwtSecret) throw new Error('JWT_SECRET must be configured');
 
   const app = express();
   app.disable('x-powered-by');
+  app.use(helmet());
   app.use(express.json({ limit: '32kb' }));
+
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    handler: (_req, res) => res.status(429).json({ error: 'Too many authentication attempts' }),
+    ...authRateLimit,
+  });
+
+  app.get('/healthz', (_req, res) => {
+    db.prepare('SELECT 1').get();
+    return res.json({ status: 'ok' });
+  });
 
   const requireAuth = (req, res, next) => {
     const authorization = req.get('authorization');
@@ -116,7 +133,7 @@ function createApp({ db, jwtSecret = process.env.JWT_SECRET } = {}) {
     next();
   };
 
-  app.post('/api/auth/register', async (req, res) => {
+  app.post('/api/auth/register', authLimiter, async (req, res) => {
     const input = validate(registrationSchema, req.body, res);
     if (!input) return;
 
@@ -140,7 +157,7 @@ function createApp({ db, jwtSecret = process.env.JWT_SECRET } = {}) {
     }
   });
 
-  app.post('/api/auth/login', async (req, res) => {
+  app.post('/api/auth/login', authLimiter, async (req, res) => {
     const input = validate(loginSchema, req.body, res);
     if (!input) return;
 

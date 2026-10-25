@@ -1,0 +1,16 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+node_modules
+dist
+data
+coverage
+playwright-report
+test-results
+screenshots
+tests
+scripts
+PROMPTS.md
+README.md
