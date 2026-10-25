@@ -212,6 +212,19 @@ function App() {
   }, [session?.token]);
 
   useEffect(() => {
+    const vehicleDetailRoute = pathname.startsWith('/vehicles/');
+    if ((['/vehicles', '/admin/inventory'].includes(pathname) || vehicleDetailRoute) && !session) {
+      navigate('/login');
+      return;
+    }
+    if ((['/vehicles', '/showroom'].includes(pathname) || vehicleDetailRoute) && isAdmin) {
+      navigate('/admin/dashboard');
+      return;
+    }
+    if (pathname === '/vehicles' && session) {
+      navigate('/showroom');
+      return;
+    }
     if (pathname === '/login' && session) {
       navigate(isAdmin ? '/admin/dashboard' : '/showroom');
       return;
@@ -227,7 +240,7 @@ function App() {
     if (pathname === '/showroom' && isAdmin) {
       navigate('/admin/dashboard');
     }
-  }, [pathname, session, isAdmin]);
+  }, [pathname, session, isAdmin, navigate]);
 
   useEffect(() => {
     if (!session || !['/showroom', '/admin/inventory'].includes(pathname)) return undefined;
@@ -393,12 +406,21 @@ function App() {
 
   const hasFilters = make || model || category || minPrice || maxPrice;
   const vehicleRoute = pathname.match(/^\/vehicles\/([0-9a-f-]+)$/i);
+  const customerRoute = pathname === '/showroom' || pathname === '/vehicles' || Boolean(vehicleRoute);
+  const adminRoute = pathname === '/admin/dashboard' || pathname === '/admin/inventory';
+  const awaitingRoleRedirect = (customerRoute && (!session || isAdmin))
+    || (adminRoute && (!session || !isAdmin))
+    || (pathname === '/login' && Boolean(session));
 
-  if (pathname === '/' || pathname === '/vehicles' || pathname === '/login' || pathname === '/contact' || vehicleRoute
+  if (awaitingRoleRedirect) {
+    return <div className="public-app"><main className="public-main route-transition" role="status">Opening your secure dealership view…</main></div>;
+  }
+
+  if (pathname === '/' || pathname === '/login' || pathname === '/contact' || vehicleRoute
     || pathname === '/admin/dashboard') {
     let pageContent;
-    if (pathname === '/' || pathname === '/vehicles') {
-      pageContent = <PublicLanding api={api} navigate={navigate} showAll={pathname === '/vehicles'} />;
+    if (pathname === '/') {
+      pageContent = <PublicLanding navigate={navigate} />;
     } else if (pathname === '/login') {
       pageContent = (
         <section className="public-auth-page">
@@ -718,8 +740,9 @@ function PublicHeader({ session, isAdmin, signOut, navigate }) {
         <span>APEX AUTO<small>INVENTORY, IN FOCUS</small></span>
       </a>
       <nav className="public-nav" aria-label="Main navigation">
-        <a href="/" onClick={(event) => follow(event, '/')}>Home</a>
-        <a href="/vehicles" onClick={(event) => follow(event, '/vehicles')}>Showroom</a>
+        <a href="/#top">Home</a>
+        <a href="/showroom" onClick={(event) => follow(event, session ? (isAdmin ? '/admin/dashboard' : '/showroom') : '/login')}>Showroom</a>
+        <a href="/#about">About</a>
         <a href="/contact" onClick={(event) => follow(event, '/contact')}>Contact</a>
       </nav>
       <div className="public-header-actions">
@@ -730,127 +753,58 @@ function PublicHeader({ session, isAdmin, signOut, navigate }) {
             <button className="apex-signout" type="button" onClick={signOut} aria-label="Sign out" title="Sign out"><LogOut size={17} /></button>
           </>
         ) : (
-          <a className="public-signin" href="/login" onClick={(event) => follow(event, '/login')}>SIGN IN <ArrowUpRight size={15} /></a>
+          <>
+            <a className="public-admin-login" href="/login" onClick={(event) => follow(event, '/login')}>ADMIN</a>
+            <a className="public-signin" href="/login" onClick={(event) => follow(event, '/login')}>SIGN IN <ArrowUpRight size={15} /></a>
+          </>
         )}
       </div>
     </header>
   );
 }
 
-function PublicLanding({ api, navigate, showAll = false }) {
-  const [vehicles, setVehicles] = useState([]);
-  const [keyword, setKeyword] = useState('');
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 0, total: 0 });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const requestId = useRef(0);
-
-  async function loadVehicles(search = '', nextPage = 1) {
-    const currentRequest = requestId.current + 1;
-    requestId.current = currentRequest;
-    setLoading(true);
-    setError('');
-    try {
-      const params = new URLSearchParams({
-        pageSize: showAll ? '12' : '6',
-        page: String(showAll ? nextPage : 1),
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
-      });
-      if (search.trim()) params.set('keyword', search.trim());
-      const result = await api(`/api/public/vehicles?${params}`);
-      if (requestId.current === currentRequest) {
-        setVehicles(result.vehicles);
-        setPagination(result.pagination);
-      }
-    } catch (requestError) {
-      if (requestId.current === currentRequest) setError(requestError.message);
-    } finally {
-      if (requestId.current === currentRequest) setLoading(false);
-    }
-  }
-
-  useEffect(() => { loadVehicles(); }, []);
-
-  function search(event) {
-    event.preventDefault();
-    loadVehicles(keyword, 1);
-  }
-
+function PublicLanding({ navigate }) {
   return (
     <>
-      <section className="public-hero">
+      <section className="public-hero" id="top">
         <div className="public-hero-copy">
-          <p className="eyebrow"><span className="eyebrow-line" /> A MORE CONSIDERED WAY TO DRIVE</p>
-          <h1>Find the car<br />that fits <span>your life.</span></h1>
-          <p className="public-lede">Thoughtfully selected vehicles, honest details, and a team ready to help you take the next turn.</p>
+          <p className="eyebrow"><span className="eyebrow-line" /> APEX AUTO · EST. FOR THE ROAD AHEAD</p>
+          <h1>Precision crafted<br />automotive <span>excellence.</span></h1>
+          <p className="public-lede">A more considered way to find your next car. Explore a carefully maintained collection with clear details and a dealership team ready to help.</p>
           <div className="public-hero-actions">
-            <a className="public-button" href="#inventory">Explore the collection <ArrowUpRight size={16} /></a>
-            <a className="public-text-link" href="/contact" onClick={(event) => { event.preventDefault(); navigate('/contact'); }}>Talk to our team</a>
+            <button className="public-button" type="button" onClick={() => navigate('/showroom')}>Enter the showroom <ArrowUpRight size={16} /></button>
+            <a className="public-text-link" href="#about">About the dealership</a>
           </div>
-          <p className="public-proof"><ShieldCheck size={16} /> Current listings shown directly from the dealership catalogue</p>
+          <p className="public-proof"><ShieldCheck size={16} /> A transparent, people-first dealership experience</p>
         </div>
         <div className="public-hero-art" aria-hidden="true">
           <div className="public-hero-orbit" />
           <CarFront size={310} strokeWidth={0.55} />
-          <span>DRIVE SOMETHING MEANINGFUL</span>
+          <span>PRECISION · CARE · CONFIDENCE</span>
         </div>
       </section>
 
-      <section className="public-catalogue" id="inventory" aria-labelledby="public-inventory-title">
-        <div className="public-section-heading">
-          <div><p className="eyebrow"><span className="eyebrow-line" /> THE CURRENT COLLECTION</p><h2 id="public-inventory-title">A good place to <span>begin.</span></h2></div>
-          <p>Browse the vehicles currently listed by the dealership. Every listing reflects recorded catalogue details.</p>
+      <section className="public-about" id="about" aria-labelledby="public-about-title">
+        <div className="public-about-heading">
+          <p className="eyebrow"><span className="eyebrow-line" /> ABOUT THE DEALERSHIP</p>
+          <h2 id="public-about-title">Good cars. Clear answers.<br /><span>A better way forward.</span></h2>
         </div>
-        <form className="public-search" onSubmit={search} role="search">
-          <label htmlFor="catalogue-search"><Search size={18} /><span className="sr-only">Search vehicles</span></label>
-          <input id="catalogue-search" value={keyword} onChange={(event) => setKeyword(event.target.value)} maxLength="120" placeholder="Search make, model, variant, or details" />
-          <button className="public-button" type="submit" disabled={loading}>Search collection</button>
-        </form>
-        {error && <div className="notice notice-error" role="alert">{error}<button type="button" onClick={() => loadVehicles(keyword, pagination.page)}>Retry</button></div>}
-        {loading ? <div className="empty-state"><div className="loading-spinner" /><p>Loading current listings…</p></div>
-          : vehicles.length ? (
-            <div className="public-vehicle-grid">
-              {vehicles.map((vehicle) => <PublicVehicleCard key={vehicle.id} vehicle={vehicle} onOpen={() => navigate(`/vehicles/${vehicle.id}`)} />)}
-            </div>
-          ) : (
-            <div className="public-empty"><CarFront size={30} /><h3>No listed vehicles found</h3><p>Try another search, or check back as the collection is updated.</p></div>
-          )}
-        <div className="public-catalogue-footer">
-          <span>Only listed vehicles appear here; availability can change. {showAll && `${pagination.total} listing${pagination.total === 1 ? '' : 's'}.`}</span>
-          {showAll ? (
-            <nav className="public-pagination" aria-label="Vehicle catalogue pages">
-              <button type="button" disabled={pagination.page <= 1 || loading} onClick={() => loadVehicles(keyword, pagination.page - 1)}>Previous</button>
-              <span>Page {pagination.page} of {Math.max(pagination.totalPages, 1)}</span>
-              <button type="button" disabled={pagination.page >= pagination.totalPages || loading} onClick={() => loadVehicles(keyword, pagination.page + 1)}>Next</button>
-            </nav>
-          ) : (
-            <button className="public-text-link" type="button" onClick={() => navigate('/vehicles')}>View full collection ({pagination.total}) <ArrowUpRight size={15} /></button>
-          )}
+        <div className="public-about-copy">
+          <p>At Apex Auto, choosing a vehicle should feel informed, personal, and straightforward. We bring our live dealership collection together with thoughtful guidance, so you can focus on finding the right fit.</p>
+          <p>Our team keeps listing information grounded in the details available to us, answers your questions directly, and helps you explore the next step at your own pace.</p>
+          <button className="public-text-link" type="button" onClick={() => navigate('/contact')}>Talk with our team <ArrowUpRight size={15} /></button>
+        </div>
+        <div className="public-about-values">
+          <article><span className="public-value-icon"><ShieldCheck size={20} /></span><h3>Curated collection</h3><p>Explore vehicles currently listed by the dealership, with availability and specifications shown as recorded.</p></article>
+          <article><span className="public-value-icon"><Check size={20} /></span><h3>Clear information</h3><p>Ask questions, review vehicle details, and make decisions with an honest view of what is known.</p></article>
+          <article><span className="public-value-icon"><UserRound size={20} /></span><h3>Personal guidance</h3><p>Our enquiry team can help you learn more about a vehicle or begin a conversation about your needs.</p></article>
         </div>
       </section>
       <section className="public-contact-cta">
-        <div><p className="eyebrow"><span className="eyebrow-line" /> HERE WHEN YOU NEED US</p><h2>Have a question<br />before the <span>test drive?</span></h2></div>
-        <button className="public-button" type="button" onClick={() => navigate('/contact')}>Send an enquiry <ArrowUpRight size={16} /></button>
+        <div><p className="eyebrow"><span className="eyebrow-line" /> YOUR NEXT DRIVE STARTS HERE</p><h2>Ready to find your <span>next car?</span></h2><p>Sign in to discover the live showroom, search listings, and use the AI Car Finder.</p></div>
+        <button className="public-button" type="button" onClick={() => navigate('/showroom')}>Explore the showroom <ArrowUpRight size={16} /></button>
       </section>
     </>
-  );
-}
-
-function PublicVehicleCard({ vehicle, onOpen }) {
-  return (
-    <article className="public-vehicle-card">
-      <button className="public-vehicle-image" type="button" onClick={onOpen} aria-label={`View ${vehicle.make} ${vehicle.model}`}>
-        {vehicle.imageUrl ? <img src={vehicle.imageUrl} alt={`${vehicle.year ? `${vehicle.year} ` : ''}${vehicle.make} ${vehicle.model}`} loading="lazy" />
-          : <><span className="public-image-orbit" /><CarFront size={90} strokeWidth={0.8} aria-hidden="true" /></>}
-        <span className="public-listing-label">{vehicle.quantity > 0 ? 'AVAILABLE' : 'SOLD OUT'}</span>
-      </button>
-      <div className="public-vehicle-content">
-        <div className="public-vehicle-title"><div><p>{[vehicle.year, vehicle.make, vehicle.variant].filter(Boolean).join(' · ')}</p><h3>{vehicle.model}</h3></div><span>{vehicle.category}</span></div>
-        <div className="public-vehicle-summary">{vehicle.bodyType || vehicle.fuelType || 'Vehicle details available'}</div>
-        <div className="public-vehicle-bottom"><strong>{money(vehicle.price)}</strong><button type="button" onClick={onOpen}>View details <ArrowUpRight size={15} /></button></div>
-      </div>
-    </article>
   );
 }
 

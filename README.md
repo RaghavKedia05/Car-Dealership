@@ -1,11 +1,11 @@
 # Apex Auto — Car Dealership Inventory
 
-A full-stack dealership website with a public vehicle catalogue and enquiry form, a role-based customer showroom, an administrator dashboard, an authenticated REST API, and persistent SQLite storage.
+A full-stack dealership website with a public dealership landing page and enquiry form, separate role-based customer and administrator views, an authenticated REST API, and persistent SQLite storage.
 
 ## Features
 
 - Create an account, sign in, and access protected endpoints with expiring JWTs.
-- Browse the public landing page, searchable listed inventory, and vehicle detail pages without an account.
+- Browse the public dealership landing page and learn about the dealership without an account.
 - Submit general or vehicle-specific enquiries as a guest or signed-in customer.
 - Use the protected showroom to explore listed stock and the administrator workspace to manage all inventory.
 - Review live inventory metrics and process/search paginated customer enquiries from the administrator dashboard.
@@ -51,10 +51,10 @@ To inspect local tables and relations, open `data\dealership.db` with [DB Browse
 
 ### Website routes and roles
 
-- `/` is the public landing page and listed-vehicle catalogue.
-- `/vehicles/:id` shows a public listing and an enquiry link; `/contact` accepts guest enquiries.
-- `/login` serves customer/admin sign-in. Successful customer sign-in opens `/showroom`; administrator sign-in opens `/admin/dashboard`.
-- `/showroom` is the authenticated customer showroom. `/admin/dashboard` and `/admin/inventory` require administrator access.
+- `/` is the public landing page and dealership overview; inventory and AI search are not shown there.
+- `/login` is the shared customer/admin sign-in. Successful customer sign-in opens `/showroom`; administrator sign-in opens `/admin/dashboard`.
+- `/showroom` is the authenticated customer catalogue and AI finder. `/admin/dashboard` and `/admin/inventory` require administrator access.
+- `/vehicles` and `/vehicles/:id` require sign-in and direct users to the role-appropriate view; `/contact` accepts guest enquiries.
 - Registration always creates a customer account. Create/promote the initial administrator using `seed-admin.js` above.
 
 ### Create the first administrator
@@ -175,7 +175,7 @@ npm.cmd run build
 
 The suite exercises registration and password hashing, login and role protection, invalid input, inventory filtering/sorting/pagination, administrator catalog operations, atomic purchases and price snapshots, restocking, migration versioning, and persistence across SQLite connections.
 
-**Latest verified results:** 38 tests passed, 0 failed, 0 skipped, and `npm.cmd run build` passed after adding the public catalogue, enquiry, dashboard, and listing-visibility flows. Run the suite/build again after subsequent changes; the previously recorded coverage and audit figures predate these routes.
+**Latest verified results:** 39 tests passed, 0 failed, 0 skipped, and `npm.cmd run build` passed after adding the public catalogue, enquiry, dashboard, and listing-visibility flows. Run the suite/build again after subsequent changes; the previously recorded coverage and audit figures predate these routes.
 
 These figures were recorded from actual commands; they do not imply frontend unit/E2E coverage. Docker is not installed in the current verification environment, so a fresh local image build was not run. See [`docs/testing.md`](docs/testing.md) for scope and limitations and rerun `npm.cmd run test:coverage` for a fresh report.
 
