@@ -1,16 +1,32 @@
 const { randomUUID } = require('node:crypto');
 const bcrypt = require('bcryptjs');
+const { z } = require('zod');
 const { createDatabase } = require('./database');
 
+const adminSchema = z.object({
+  email: z.string().trim().email().max(254).transform((email) => email.toLowerCase()),
+  password: z.string().min(12).refine(
+    (password) => Buffer.byteLength(password, 'utf8') <= 72,
+    'password must be no longer than 72 UTF-8 bytes',
+  ),
+  name: z.string().trim().min(2).max(80),
+});
+
 async function main() {
-  const { ADMIN_EMAIL: email, ADMIN_PASSWORD: password, ADMIN_NAME: name = 'Dealership Admin' } = process.env;
-  if (!email || !password || Buffer.byteLength(password, 'utf8') < 12 || Buffer.byteLength(password, 'utf8') > 72) {
-    throw new Error('Set ADMIN_EMAIL and an ADMIN_PASSWORD that is 12–72 UTF-8 bytes long');
+  const input = adminSchema.safeParse({
+    email: process.env.ADMIN_EMAIL,
+    password: process.env.ADMIN_PASSWORD,
+    name: process.env.ADMIN_NAME || 'Dealership Admin',
+  });
+  if (!input.success) {
+    const fields = input.error.issues.map(({ path, message }) => `${path.join('.')}: ${message}`).join('; ');
+    throw new Error(`Invalid administrator configuration: ${fields}`);
   }
 
+  const { email, password, name } = input.data;
   const db = createDatabase(process.env.DATABASE_PATH);
   try {
-    const existing = db.prepare('SELECT id, role FROM users WHERE email = ?').get(email.trim().toLowerCase());
+    const existing = db.prepare('SELECT id, role FROM users WHERE email = ?').get(email);
     if (existing) {
       if (existing.role !== 'admin') {
         db.prepare('UPDATE users SET role = ? WHERE id = ?').run('admin', existing.id);
@@ -21,7 +37,7 @@ async function main() {
 
     const passwordHash = await bcrypt.hash(password, 12);
     db.prepare('INSERT INTO users (id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)')
-      .run(randomUUID(), name.trim(), email.trim().toLowerCase(), passwordHash, 'admin');
+      .run(randomUUID(), name, email, passwordHash, 'admin');
     console.log(`Administrator account created for ${email}`);
   } finally {
     db.close();
