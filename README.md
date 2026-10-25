@@ -125,4 +125,4 @@ AI helped me move more quickly from the brief to a complete working vertical sli
 
 ## Repository and deployment
 
-This project is initialized as a local Git repository with staged red/green development milestones. No public remote or live deployment URL was supplied; publish the repository and deploy the app separately if those links are required for submission.
+This project is hosted at [RaghavKedia05/Car-Dealership](https://github.com/RaghavKedia05/Car-Dealership). No live deployment URL is currently available.
