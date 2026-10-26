@@ -1,7 +1,7 @@
 const { randomUUID } = require('node:crypto');
 const bcrypt = require('bcryptjs');
 const { z } = require('zod');
-const { createDatabase } = require('./database');
+const { createDatabase, createPostgresDatabase } = require('./database');
 
 const adminSchema = z.object({
   email: z.string().trim().email().max(254).transform((email) => email.toLowerCase()),
@@ -24,26 +24,29 @@ async function main() {
   }
 
   const { email, password, name } = input.data;
-  const db = createDatabase(process.env.DATABASE_PATH);
+  let db;
   try {
-    const existing = db.prepare('SELECT id, role FROM users WHERE email = ?').get(email);
+    db = process.env.DATABASE_URL
+      ? createPostgresDatabase()
+      : createDatabase(process.env.DATABASE_PATH);
+    if (process.env.DATABASE_URL) await db.migrate();
+    const existing = await db.get('SELECT id, role FROM users WHERE LOWER(email) = LOWER(?)', email);
     if (existing) {
       if (existing.role !== 'admin') {
-        db.prepare('UPDATE users SET role = ? WHERE id = ?').run('admin', existing.id);
+        await db.run('UPDATE users SET role = ? WHERE id = ?', 'admin', existing.id);
       }
       console.log(`Administrator access enabled for ${email}`);
       return;
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    db.prepare(`
+    await db.run(`
       INSERT INTO users (id, name, email, password_hash, role, updated_at)
-      VALUES (?, ?, ?, ?, ?, datetime('now'))
-    `)
-      .run(randomUUID(), name, email, passwordHash, 'admin');
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `, randomUUID(), name, email, passwordHash, 'admin');
     console.log(`Administrator account created for ${email}`);
   } finally {
-    db.close();
+    if (db) await db.close();
   }
 }
 

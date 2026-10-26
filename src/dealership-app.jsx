@@ -23,9 +23,14 @@ import {
   UserRound,
   X,
 } from 'lucide-react';
-import './styles.css';
+import './dealership-ui.css';
 
 const CATEGORIES = ['SUV', 'Sedan', 'Truck', 'Coupe', 'Hatchback', 'Wagon', 'Van', 'Electric', 'Other'];
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+
+function apiUrl(path) {
+  return `${API_BASE_URL}${path}`;
+}
 
 function reportError(error) {
   const message = error instanceof TypeError
@@ -42,8 +47,11 @@ async function parseApiResponse(response, fallbackMessage) {
   try {
     body = JSON.parse(responseText);
   } catch {
+    const endpoint = response.url
+      ? new URL(response.url).pathname
+      : 'the API endpoint';
     const requestError = new Error(
-      `The server returned an unexpected response (HTTP ${response.status}) instead of JSON. Check that the API service is running and its /api route is correctly configured.`,
+      `The request to ${endpoint} returned HTTP ${response.status} with a non-JSON response. The request may be reaching a static frontend instead of the dealership API. Ensure /api and /healthz are routed to the Express server, or serve the frontend and API from the same app.`,
     );
     requestError.status = response.status;
     reportError(requestError);
@@ -204,7 +212,7 @@ function App() {
   useEffect(() => {
     let active = true;
     const startedAt = performance.now();
-    fetch('/healthz', { cache: 'no-store' })
+    fetch(apiUrl('/healthz'), { cache: 'no-store' })
       .then((response) => parseApiResponse(response, `Health check returned HTTP ${response.status}`))
       .then((body) => {
         if (active) {
@@ -225,7 +233,7 @@ function App() {
   }, []);
 
   const api = useCallback(async (url, options = {}) => {
-    const response = await fetch(url, {
+    const response = await fetch(apiUrl(url), {
       ...options,
       headers: {
         ...(options.body ? { 'Content-Type': 'application/json' } : {}),
@@ -242,7 +250,7 @@ function App() {
   useEffect(() => {
     if (!session) return undefined;
     let active = true;
-    fetch('/api/auth/me', { headers: { Authorization: `Bearer ${session.token}` } })
+    fetch(apiUrl('/api/auth/me'), { headers: { Authorization: `Bearer ${session.token}` } })
       .then(async (response) => {
         if (!response.ok) throw new Error('The saved session is no longer valid');
         return response.json();
@@ -350,7 +358,7 @@ function App() {
 
   const signOut = useCallback(() => {
     if (session) {
-      fetch('/api/auth/logout', {
+      fetch(apiUrl('/api/auth/logout'), {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.token}` },
         keepalive: true,
@@ -1433,7 +1441,7 @@ function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) {
     setSelectedIds([]);
     const startedAt = performance.now();
     try {
-      const response = await fetch('/api/ai/car-finder', {
+      const response = await fetch(apiUrl('/api/ai/car-finder'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1484,7 +1492,7 @@ function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) {
     setError('');
     const startedAt = performance.now();
     try {
-      const response = await fetch('/api/ai/car-finder/compare', {
+      const response = await fetch(apiUrl('/api/ai/car-finder/compare'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1898,7 +1906,7 @@ function AuthForm({ mode, setMode, role, setRole, onAuthenticated, setError, err
     setSubmitting(true);
     setError('');
     try {
-      const response = await fetch(`/api/auth/${registering ? 'register' : 'login'}`, {
+      const response = await fetch(apiUrl(`/api/auth/${registering ? 'register' : 'login'}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...(registering ? { name } : {}), email, password }),

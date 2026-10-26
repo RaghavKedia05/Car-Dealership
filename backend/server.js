@@ -1,6 +1,6 @@
 const path = require('node:path');
 const { createApp } = require('./app');
-const { createDatabase } = require('./database');
+const { createDatabase, createPostgresDatabase } = require('./database');
 
 const port = Number.parseInt(process.env.PORT || '3001', 10);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -15,26 +15,26 @@ if (!process.env.JWT_SECRET) {
   process.env.JWT_SECRET = require('node:crypto').randomBytes(32).toString('hex');
 }
 
-const databasePath = process.env.DATABASE_PATH || path.join(__dirname, '..', 'data', 'dealership.db');
-const db = createDatabase(databasePath);
-const app = createApp({ db, jwtSecret: process.env.JWT_SECRET });
-if (process.env.TRUST_PROXY_HOPS !== undefined && process.env.TRUST_PROXY_HOPS !== '0') {
-  if (!/^\d+$/.test(process.env.TRUST_PROXY_HOPS)) {
-    throw new Error('TRUST_PROXY_HOPS must be 0 or an integer between 1 and 10');
-  }
-  const trustProxyHops = Number.parseInt(process.env.TRUST_PROXY_HOPS, 10);
-  if (!Number.isInteger(trustProxyHops) || trustProxyHops < 1 || trustProxyHops > 10) {
-    throw new Error('TRUST_PROXY_HOPS must be 0 or an integer between 1 and 10');
-  }
-  app.set('trust proxy', trustProxyHops);
-}
-const server = app.listen(port, () => {
-  console.log(`Dealership API listening on port ${port}`);
-});
+const db = process.env.DATABASE_URL
+  ? createPostgresDatabase()
+  : createDatabase(process.env.DATABASE_PATH || path.join(__dirname, '..', 'data', 'dealership.db'));
+const corsOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+let server;
 
 function shutdown() {
+  const closeDatabase = () => db.close();
+  if (!server) {
+    closeDatabase();
+    return;
+  }
   server.close((error) => {
-    db.close();
+    Promise.resolve(closeDatabase()).catch((closeError) => {
+      console.error(closeError);
+      process.exitCode = 1;
+    });
     if (error) {
       console.error(error);
       process.exitCode = 1;
@@ -42,5 +42,28 @@ function shutdown() {
   });
 }
 
+async function start() {
+  if (process.env.DATABASE_URL) await db.migrate();
+  const app = createApp({ db, jwtSecret: process.env.JWT_SECRET, corsOrigins });
+  if (process.env.TRUST_PROXY_HOPS !== undefined && process.env.TRUST_PROXY_HOPS !== '0') {
+    if (!/^\d+$/.test(process.env.TRUST_PROXY_HOPS)) {
+      throw new Error('TRUST_PROXY_HOPS must be 0 or an integer between 1 and 10');
+    }
+    const trustProxyHops = Number.parseInt(process.env.TRUST_PROXY_HOPS, 10);
+    if (!Number.isInteger(trustProxyHops) || trustProxyHops < 1 || trustProxyHops > 10) {
+      throw new Error('TRUST_PROXY_HOPS must be 0 or an integer between 1 and 10');
+    }
+    app.set('trust proxy', trustProxyHops);
+  }
+  server = app.listen(port, () => {
+    console.log(`Dealership API listening on port ${port}`);
+  });
+}
+
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+start().catch(async (error) => {
+  console.error(error);
+  await db.close();
+  process.exitCode = 1;
+});

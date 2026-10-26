@@ -291,6 +291,37 @@ test('health endpoint exposes readiness and security headers', async (t) => {
   assert.equal(response.headers['x-powered-by'], undefined);
 });
 
+test('CORS allows configured frontend origins and rejects other preflight origins', async (t) => {
+  const db = createDatabase(':memory:');
+  const app = createApp({
+    db,
+    jwtSecret: 'test-secret-that-is-long-enough',
+    corsOrigins: ['https://car-dealership-sand.vercel.app'],
+  });
+  t.after(() => db.close());
+
+  const allowed = await request(app)
+    .options('/api/public/vehicles')
+    .set('Origin', 'https://car-dealership-sand.vercel.app')
+    .set('Access-Control-Request-Method', 'GET');
+  assert.equal(allowed.status, 204);
+  assert.equal(allowed.headers['access-control-allow-origin'], 'https://car-dealership-sand.vercel.app');
+  assert.match(allowed.headers['access-control-allow-methods'], /GET/);
+
+  const rejected = await request(app)
+    .options('/api/public/vehicles')
+    .set('Origin', 'https://attacker.example')
+    .set('Access-Control-Request-Method', 'GET');
+  assert.equal(rejected.status, 403);
+  assert.equal(rejected.headers['access-control-allow-origin'], undefined);
+
+  const nonPreflight = await request(app)
+    .get('/healthz')
+    .set('Origin', 'https://attacker.example');
+  assert.equal(nonPreflight.status, 200);
+  assert.equal(nonPreflight.headers['access-control-allow-origin'], undefined);
+});
+
 test('authentication endpoints limit repeated requests', async (t) => {
   const db = createDatabase(':memory:');
   const app = createApp({
@@ -320,6 +351,7 @@ test('production server rejects missing or short JWT secrets', () => {
         ...process.env,
         NODE_ENV: 'production',
         JWT_SECRET: jwtSecret,
+        DATABASE_URL: '',
         PORT: '3001',
         DATABASE_PATH: ':memory:',
       },

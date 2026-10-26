@@ -506,14 +506,14 @@ function buildComparison(vehicles, originalQuery = '') {
   };
 }
 
-function queryInventory(db, criteria, relaxedField = null, listedOnly = false) {
+async function queryInventory(db, criteria, relaxedField = null, listedOnly = false) {
   const clauses = ['quantity > 0'];
   if (listedOnly) clauses.push("status = 'listed'");
   const values = [];
   const filters = {
-    make: ['make = ? COLLATE NOCASE', criteria.make],
-    model: ['model = ? COLLATE NOCASE', criteria.model],
-    category: ['category = ? COLLATE NOCASE', criteria.category],
+    make: ['LOWER(make) = LOWER(?)', criteria.make],
+    model: ['LOWER(model) = LOWER(?)', criteria.model],
+    category: ['LOWER(category) = LOWER(?)', criteria.category],
     fuelType: ['fuel_type = ?', criteria.fuelType],
     transmission: ['transmission = ?', criteria.transmission],
     maxPrice: ['price <= ?', criteria.maxPrice],
@@ -529,15 +529,14 @@ function queryInventory(db, criteria, relaxedField = null, listedOnly = false) {
       values.push(value);
     }
   }
-  return db.prepare(`SELECT * FROM vehicles WHERE ${clauses.join(' AND ')} ORDER BY price ASC, id ASC LIMIT 500`)
-    .all(...values);
+  return db.all(`SELECT * FROM vehicles WHERE ${clauses.join(' AND ')} ORDER BY price ASC, id ASC LIMIT 500`, ...values);
 }
 
 async function findCars(db, query, options = {}) {
-  const allRows = db.prepare(`
+  const allRows = await db.all(`
     SELECT make, model, category, body_type, fuel_type, transmission
     FROM vehicles ${options.listedOnly ? "WHERE status = 'listed'" : ''}
-  `).all();
+  `);
   const parsed = await parseCriteria(query, { providerParser: options.providerParser });
   if (parsed.parser === 'deterministic') {
     parsed.criteria = parseNaturalQuery(query, allRows);
@@ -559,14 +558,14 @@ async function findCars(db, query, options = {}) {
     };
   }
 
-  const exact = recommendVehicles(criteria, queryInventory(db, criteria, null, options.listedOnly));
+  const exact = recommendVehicles(criteria, await queryInventory(db, criteria, null, options.listedOnly));
   const alternatives = [];
   if (!exact.matches.length) {
-    const available = db.prepare(`
+    const available = await db.all(`
       SELECT * FROM vehicles WHERE quantity > 0
       ${options.listedOnly ? "AND status = 'listed'" : ''}
       ORDER BY price ASC, id ASC LIMIT 500
-    `).all();
+    `);
     alternatives.push(...generateAlternatives(criteria, available));
   }
   const filters = criteria.mustHave || [];

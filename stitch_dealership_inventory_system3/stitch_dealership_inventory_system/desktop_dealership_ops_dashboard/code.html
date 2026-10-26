@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "secondary": "#ffb95f", "on-surface-variant": "#c2c6d6", "inverse-on-surface": "#283044", "outline-variant": "#424754", "on-error": "#690005", "on-secondary-fixed-variant": "#653e00", "surface-container-high": "#222a3d", "outline": "#8c909f", "tertiary-fixed-dim": "#4edea3", "secondary-fixed": "#ffddb8", "error": "#ffb4ab", "surface-tint": "#adc6ff", "surface-container-lowest": "#060e20", "on-tertiary": "#003824", "primary-fixed-dim": "#adc6ff", "surface-variant": "#2d3449", "surface-dim": "#0b1326", "tertiary-fixed": "#6ffbbe", "on-secondary-fixed": "#2a1700", "on-tertiary-fixed": "#002113", "inverse-surface": "#dae2fd", "on-primary-fixed-variant": "#004395", "surface-bright": "#31394d", "secondary-fixed-dim": "#ffb95f", "secondary-container": "#ee9800", "on-error-container": "#ffdad6", "primary": "#adc6ff", "on-background": "#dae2fd", "primary-fixed": "#d8e2ff", "surface": "#0b1326", "on-primary-fixed": "#001a42", "on-primary": "#002e6a", "surface-container-low": "#131b2e", "on-primary-container": "#00285d", "inverse-primary": "#005ac2", "background": "#0b1326", "on-secondary-container": "#5b3800", "on-surface": "#dae2fd", "error-container": "#93000a", "surface-container-highest": "#2d3449", "tertiary": "#4edea3", "primary-container": "#4d8eff", "surface-container": "#171f33", "on-tertiary-container": "#00311f", "on-tertiary-fixed-variant": "#005236", "tertiary-container": "#00a572", "on-secondary": "#472a00" }, "borderRadius": { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, "spacing": { "space-xs": "0.25rem", "gutter": "1rem", "gutter-tablet": "1.25rem", "space-sm": "0.5rem", "space-xl": "2.5rem", "space-md": "1rem", "margin-tablet": "1.5rem", "gutter-desktop": "1.5rem", "margin": "1rem", "space-lg": "1.5rem", "margin-desktop": "2.5rem" }, "fontFamily": { "data-mono-lg": [ "JetBrains Mono" ], "data-mono-md": [ "JetBrains Mono" ], "headline-md": [ "Plus Jakarta Sans" ], "body-lg": [ "Plus Jakarta Sans" ], "body-sm": [ "Plus Jakarta Sans" ], "label-caps": [ "JetBrains Mono" ], "headline-xl": [ "Plus Jakarta Sans" ], "headline-xl-mobile": [ "Plus Jakarta Sans" ], "headline-lg": [ "Plus Jakarta Sans" ], "body-md": [ "Plus Jakarta Sans" ] }, "fontSize": { "data-mono-lg": [ "18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" } ], "data-mono-md": [ "14px", { "lineHeight": "18px", "fontWeight": "500" } ], "headline-md": [ "20px", { "lineHeight": "28px", "fontWeight": "600" } ], "body-lg": [ "16px", { "lineHeight": "24px", "fontWeight": "400" } ], "body-sm": [ "12px", { "lineHeight": "16px", "fontWeight": "400" } ], "label-caps": [ "11px", { "lineHeight": "14px", "letterSpacing": "0.06em", "fontWeight": "600" } ], "headline-xl": [ "36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "800" } ], "headline-xl-mobile": [ "28px", { "lineHeight": "36px", "letterSpacing": "-0.02em", "fontWeight": "800" } ], "headline-lg": [ "24px", { "lineHeight": "32px", "letterSpacing": "-0.015em", "fontWeight": "700" } ], "body-md": [ "14px", { "lineHeight": "20px", "fontWeight": "400" } ] } } } };</script></head><body class="bg-background font-body-md text-on-surface antialiased selection:bg-primary-container selection:text-on-primary-container min-h-screen"><aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-lowest z-50 flex flex-col pt-space-md pb-space-lg shadow-[2px_0_12px_rgba(0,0,0,0.5)]"><div class="px-space-md pb-space-lg flex items-center gap-space-sm"><div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-primary"><span class="material-symbols-outlined text-[22px]">speed</span></div><div class="flex flex-col"><span class="font-headline-md text-headline-md tracking-tight font-extrabold text-on-surface leading-none uppercase">Apex</span><span class="font-label-caps text-label-caps text-secondary font-bold tracking-widest mt-0.5">Ops Console</span></div></div><div class="px-space-md py-space-xs"><div class="p-space-sm rounded-lg bg-surface-container-low flex items-center justify-between"><div class="flex items-center gap-space-xs"><span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span><span class="font-label-caps text-label-caps text-tertiary uppercase">Telemetry Active</span></div><span class="font-data-mono-md text-data-mono-md text-on-surface-variant font-semibold">24 LIVE</span></div></div><div class="px-space-md pt-space-md pb-space-xs"><span class="font-label-caps text-label-caps text-outline uppercase tracking-wider">Operations Core</span></div><nav class="flex-1 px-space-sm flex flex-col gap-1" data-active-classes="bg-primary-container text-on-primary-container font-semibold"><a aria-current="page" class="flex items-center gap-space-sm px-space-md py-2.5 rounded-lg transition-colors bg-primary-container text-on-primary-container font-semibold" data-path="inventory-ops-dashboard" href="#"><span class="material-symbols-outlined text-[20px]">tune</span>Inventory Ops</a><a class="flex items-center gap-space-sm px-space-md py-2.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors font-body-md text-body-md" data-path="add-edit-vehicle-studio" href="#"><span class="material-symbols-outlined text-[20px]">garage_home</span>Vehicle Studio</a><a class="flex items-center gap-space-sm px-space-md py-2.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors font-body-md text-body-md" data-path="tdd-labs-test-runner" href="#"><span class="material-symbols-outlined text-[20px]">science</span>TDD Labs &amp; Runner</a></nav><div class="px-space-sm pt-space-xs"><div class="p-space-sm rounded-lg bg-surface-container-low flex flex-col gap-space-xs"><span class="font-label-caps text-label-caps text-outline uppercase">Environment Status</span><div class="flex items-center justify-between font-data-mono-md text-data-mono-md"><span class="text-on-surface-variant">Lot Sensor API</span><span class="text-tertiary">99.98%</span></div></div></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-16 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.4)] z-40 flex items-center justify-between px-space-lg"><div class="flex items-center gap-space-md"><span class="font-label-caps text-label-caps px-space-sm py-1 rounded bg-secondary-container/20 text-secondary uppercase font-semibold">Dealership Admin Terminal</span></div><div class="flex items-center gap-space-md"><div class="flex items-center p-1 rounded-lg bg-surface-container-lowest"><a class="px-space-sm py-1 rounded-md font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors" data-path="landing-showroom" href="#">Customer Portal</a><a class="px-space-sm py-1 rounded-md font-label-caps text-label-caps bg-surface-container-high text-on-surface font-semibold" data-path="inventory-ops-dashboard" href="#">Admin Mode</a></div><button aria-label="Notifications" class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors"><span class="material-symbols-outlined text-[20px]">notifications</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></header><main class="w-full pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<div class="p-space-lg flex flex-col gap-space-lg max-w-[1720px] mx-auto w-full">
+<!-- Top Command Strip: Executive Overview & Live Status -->
+<div class="flex flex-col xl:flex-row xl:items-end justify-between gap-space-md">
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center gap-space-sm">
+<span class="font-label-caps text-label-caps text-primary tracking-widest uppercase">Fleet Operations Hub</span>
+<span class="text-outline-variant">•</span>
+<span class="font-data-mono-md text-data-mono-md text-tertiary flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+            SYNC LIVE (LATENCY 12ms)
+          </span>
+</div>
+<div class="flex items-baseline gap-space-md">
+<h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight">Inventory Yard Telemetry</h1>
+<span class="font-data-mono-md text-data-mono-md text-outline">LOC: BAY-NORTH // SECTOR 04</span>
+</div>
+</div>
+<!-- Quick Operational Controls -->
+<div class="flex items-center gap-space-sm flex-wrap">
+<div class="bg-surface-container-low px-space-md py-2 rounded-lg flex items-center gap-space-md shadow-sm">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Yard Audit Protocol</span>
+<span class="font-data-mono-md text-data-mono-md text-tertiary font-bold">MUTEX v4.18</span>
+</div>
+<a class="px-space-md py-2.5 bg-primary-container hover:bg-primary-container/90 text-on-primary-container rounded-lg font-headline-md text-body-md flex items-center gap-space-xs shadow-md transition-all" data-path="add-edit-vehicle-studio" href="#">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+<span>+ Add New Vehicle</span>
+</a>
+</div>
+</div>
+<!-- 4 KPI Metric Cards Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-space-md">
+<!-- KPI 1: Fleet Valuation -->
+<div class="p-space-lg rounded-xl bg-surface-container-low flex flex-col justify-between gap-space-md relative overflow-hidden shadow-sm">
+<div class="absolute -right-6 -bottom-6 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none"></div>
+<div class="flex items-start justify-between">
+<div class="flex flex-col gap-1">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Total Fleet Valuation</span>
+<div class="flex items-baseline gap-2 mt-1">
+<span class="font-headline-lg text-headline-lg text-on-surface font-extrabold tracking-tight">$2,480,000</span>
+<span class="font-data-mono-md text-data-mono-md text-outline">/ ₹19.4 Cr</span>
+</div>
+</div>
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">account_balance_wallet</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-xs">
+<span class="inline-flex items-center gap-1 font-data-mono-md text-data-mono-md text-tertiary">
+<span class="material-symbols-outlined text-[16px]">trending_up</span>
+            +14.2% MoM
+          </span>
+<span class="font-data-mono-md text-data-mono-md text-on-surface-variant">24 Active Allocations</span>
+</div>
+<div class="w-full bg-surface-container h-1 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 78%"></div>
+</div>
+</div>
+<!-- KPI 2: Velocity -->
+<div class="p-space-lg rounded-xl bg-surface-container-low flex flex-col justify-between gap-space-md relative overflow-hidden shadow-sm">
+<div class="flex items-start justify-between">
+<div class="flex flex-col gap-1">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Stock Turn Velocity</span>
+<div class="flex items-baseline gap-2 mt-1">
+<span class="font-headline-lg text-headline-lg text-on-surface font-extrabold tracking-tight">8.4 Days</span>
+<span class="font-data-mono-md text-data-mono-md text-tertiary">Target &lt; 10d</span>
+</div>
+</div>
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined text-[20px]">bolt</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-xs">
+<span class="font-data-mono-md text-data-mono-md text-tertiary flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+            94% on-target turnover
+          </span>
+<span class="font-label-caps text-label-caps text-outline uppercase">Fast Velocity</span>
+</div>
+<div class="w-full bg-surface-container h-1 rounded-full overflow-hidden">
+<div class="bg-tertiary h-full rounded-full" style="width: 94%"></div>
+</div>
+</div>
+<!-- KPI 3: Restock Alerts -->
+<div class="p-space-lg rounded-xl bg-surface-container-low flex flex-col justify-between gap-space-md relative overflow-hidden shadow-sm">
+<div class="flex items-start justify-between">
+<div class="flex flex-col gap-1">
+<span class="font-label-caps text-label-caps text-secondary uppercase">Low Stock Threshold</span>
+<div class="flex items-baseline gap-2 mt-1">
+<span class="font-headline-lg text-headline-lg text-secondary font-extrabold tracking-tight">3 Models</span>
+<span class="font-data-mono-md text-data-mono-md text-secondary/80">Critical @ 1 Unit</span>
+</div>
+</div>
+<div class="w-10 h-10 rounded-lg bg-secondary/10 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[20px]">warning</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-xs">
+<span class="font-data-mono-md text-data-mono-md text-secondary flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+            Instant trigger primed
+          </span>
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">P1 Re-Order</span>
+</div>
+<div class="w-full bg-surface-container h-1 rounded-full overflow-hidden">
+<div class="bg-secondary h-full rounded-full" style="width: 62%"></div>
+</div>
+</div>
+<!-- KPI 4: Escrow / Concluded -->
+<div class="p-space-lg rounded-xl bg-surface-container-low flex flex-col justify-between gap-space-md relative overflow-hidden shadow-sm">
+<div class="flex items-start justify-between">
+<div class="flex flex-col gap-1">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Out of Stock &amp; Escrow</span>
+<div class="flex items-baseline gap-2 mt-1">
+<span class="font-headline-lg text-headline-lg text-on-surface font-extrabold tracking-tight">1 Sold Out</span>
+<span class="font-data-mono-md text-data-mono-md text-error">4 In Escrow</span>
+</div>
+</div>
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-error">
+<span class="material-symbols-outlined text-[20px]">lock</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-xs">
+<span class="font-data-mono-md text-data-mono-md text-on-surface-variant">Allocations Sealed</span>
+<span class="font-label-caps text-label-caps text-tertiary uppercase">₹82.6L Escrow</span>
+</div>
+<div class="w-full bg-surface-container h-1 rounded-full overflow-hidden">
+<div class="bg-error h-full rounded-full" style="width: 25%"></div>
+</div>
+</div>
+</div>
+<!-- Admin Filter & Search Cockpit Bar -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-space-md shadow-sm">
+<!-- Left: VIN & Search Field + Filter Chips -->
+<div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-space-md flex-1">
+<div class="relative min-w-[320px]">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span>
+<input class="w-full bg-surface-container-lowest text-on-surface font-data-mono-md text-data-mono-md pl-10 pr-10 py-2.5 rounded-lg outline-none placeholder:text-outline focus:ring-1 focus:ring-primary" placeholder="Search inventory by VIN or Model..." type="text"/>
+<button class="absolute right-2.5 top-1/2 -translate-y-1/2 text-outline-variant hover:text-primary transition-colors" title="Optical VIN Scanner">
+<span class="material-symbols-outlined text-[18px]">document_scanner</span>
+</button>
+</div>
+<!-- Stock Status Segment Filter -->
+<div class="flex items-center gap-1 p-1 bg-surface-container-lowest rounded-lg overflow-x-auto">
+<button class="px-space-md py-1.5 rounded-md font-label-caps text-label-caps bg-primary text-on-primary font-bold shadow-sm whitespace-nowrap">
+            All (24)
+          </button>
+<button class="px-space-md py-1.5 rounded-md font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors whitespace-nowrap">
+            Healthy (20)
+          </button>
+<button class="px-space-md py-1.5 rounded-md font-label-caps text-label-caps text-secondary hover:bg-surface-container transition-colors whitespace-nowrap">
+            Low Stock (3)
+          </button>
+<button class="px-space-md py-1.5 rounded-md font-label-caps text-label-caps text-error hover:bg-surface-container transition-colors whitespace-nowrap">
+            Sold Out (1)
+          </button>
+</div>
+</div>
+<!-- Right: Bulk Actions & Yard Actions -->
+<div class="flex items-center gap-space-sm self-end lg:self-auto">
+<button class="px-space-md py-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-md text-body-md flex items-center gap-space-xs transition-colors">
+<span class="material-symbols-outlined text-[18px]">download</span>
+<span>Export CSV</span>
+</button>
+<button class="px-space-md py-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-md text-body-md flex items-center gap-space-xs transition-colors">
+<span class="material-symbols-outlined text-[18px]">cell_tower</span>
+<span>Audit Yard Telemetry</span>
+</button>
+</div>
+</div>
+<!-- Inventory Operations Table -->
+<div class="rounded-xl bg-surface-container-low shadow-xl overflow-hidden relative">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-lowest font-label-caps text-label-caps text-outline uppercase tracking-wider">
+<th class="py-space-md px-space-md font-semibold">Vehicle Specs</th>
+<th class="py-space-md px-space-md font-semibold">VIN Hash</th>
+<th class="py-space-md px-space-md font-semibold">Category</th>
+<th class="py-space-md px-space-md font-semibold text-right">Price / Ex-Showroom</th>
+<th class="py-space-md px-space-md font-semibold text-center">Stock State</th>
+<th class="py-space-md px-space-md font-semibold text-center">Turn Days</th>
+<th class="py-space-md px-space-md font-semibold">Telemetry Audit</th>
+<th class="py-space-md px-space-md font-semibold text-right">Ops Execution</th>
+</tr>
+</thead>
+<tbody class="divide-y-0 text-on-surface font-body-md text-body-md">
+<!-- Row 1: Porsche Taycan 4S -->
+<tr class="hover:bg-surface-container transition-colors group">
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-md min-w-[240px]">
+<div class="w-16 h-11 rounded-lg bg-surface-container-high overflow-hidden shrink-0 shadow-sm relative">
+<img class="w-full h-full object-cover" data-alt="A front three-quarter studio photograph of a gleaming 2024 Porsche Taycan 4S in frozen blue metallic finish. Hyper-clean luxury dark carbon showroom background with sleek LED rim lighting accentuating aerodynamic body lines." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCBxYxM0SoMZvFSkZ895wbLpiX_yzVAq1FClSxev6a42GdiphJoyeWKFNm_zHPMDavpsrr_B_L_1nGpMd9dOvFoG-fpG9o9pFjqkdAWj0tBaewMqAp82jcLXLU68DTmGs6aXUKqNH1Nt1eCodxp9mGPa7iYmbNH_H-rBezn7pAVx0-Us5Tj6rkwZjywQlcMmA-MvySSof-mwsy-kr6N2UYlZR3Wh6t9H_M9EDvNf3s"/>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-md text-body-lg font-bold text-on-surface truncate">2024 Porsche Taycan 4S</span>
+<span class="font-body-sm text-body-sm text-outline">AWD • Performance Battery Plus</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<span class="font-data-mono-md text-data-mono-md text-on-surface-variant bg-surface-container-lowest px-2 py-1 rounded">WP0AA2Y18RSA9****</span>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<span class="px-2.5 py-1 rounded-full bg-surface-container-high text-primary font-label-caps text-label-caps uppercase">Luxury EV</span>
+</td>
+<td class="py-space-md px-space-md text-right whitespace-nowrap">
+<span class="font-data-mono-lg text-data-mono-lg text-on-surface font-bold">$118,500</span>
+</td>
+<td class="py-space-md px-space-md text-center whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-tertiary/10 text-tertiary font-label-caps text-label-caps uppercase font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                  2 Units • Healthy
+                </span>
+</td>
+<td class="py-space-md px-space-md text-center whitespace-nowrap">
+<span class="font-data-mono-md text-data-mono-md text-on-surface">4 Days</span>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-tertiary">verified</span>
+<span class="font-data-mono-md text-data-mono-md text-tertiary font-semibold">100% Pass</span>
+</div>
+</td>
+<td class="py-space-md px-space-md text-right whitespace-nowrap">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-high text-primary hover:text-on-surface transition-colors" title="Restock +1">
+<span class="material-symbols-outlined text-[18px]">exposure_plus_1</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors" title="Edit Vehicle">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-error/20 text-on-surface-variant hover:text-error transition-colors" title="De-list">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 2: Tata Safari Adventure+ WITH RESTOCK MODAL / POPOVER EMBEDDED -->
+<tr class="bg-surface-container/60 relative">
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-md min-w-[240px]">
+<div class="w-16 h-11 rounded-lg bg-surface-container-high overflow-hidden shrink-0 shadow-sm relative">
+<img class="w-full h-full object-cover" data-alt="Rugged 2024 Tata Safari Adventure Plus edition SUV in Tropical Mist gloss finish parked on clean dark concrete with subtle amber spotlights accenting the assertive grille and roof rails." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDGp5ovEjZ7WF89nj8ootdRshadHeAQ2daXBfQU5HYw5QZJdvJjCITbMj7i0myRujlFPom2BXHzXzGp5u87G903qTcZSQpbyZqkxrrpkRN9wx3L24QI1i4v2oyp4bo3WJuRrm8KmVfpfz088qQvUvVxYObk0yhVfI8ww5qhXZ-DjpNEYGn0CaZNvKrgkRXr5mpylREpeCXRCITdfSiTjmtYbXAObsDa_1XKyR7vOIk"/>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-md text-body-lg font-bold text-on-surface truncate">2024 Tata Safari Adventure+</span>
+<span class="font-body-sm text-body-sm text-outline">Kryotec 2.0L Diesel • Automatic</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<span class="font-data-mono-md text-data-mono-md text-on-surface-variant bg-surface-container-lowest px-2 py-1 rounded">MAT623547PNA1****</span>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<span class="px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-caps text-label-caps uppercase">SUV</span>
+</td>
+<td class="py-space-md px-space-md text-right whitespace-nowrap">
+<span class="font-data-mono-lg text-data-mono-lg text-on-surface font-bold">₹19,49,000</span>
+</td>
+<td class="py-space-md px-space-md text-center whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-secondary/10 text-secondary font-label-caps text-label-caps uppercase font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+                  1 Unit • Low Stock
+                </span>
+</td>
+<td class="py-space-md px-space-md text-center whitespace-nowrap">
+<span class="font-data-mono-md text-data-mono-md text-on-surface">9 Days</span>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-tertiary">verified</span>
+<span class="font-data-mono-md text-data-mono-md text-tertiary font-semibold">100% Pass</span>
+</div>
+</td>
+<td class="py-space-md px-space-md text-right whitespace-nowrap relative">
+<div class="flex items-center justify-end gap-1">
+<!-- Active Quick Restock Trigger (Active state for visual demo) -->
+<button class="px-space-sm py-1.5 rounded bg-secondary text-on-secondary font-headline-md text-body-sm font-bold shadow-md flex items-center gap-1" id="safariRestockBtn">
+<span class="material-symbols-outlined text-[16px]">add_box</span>
+<span>Restock</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-error/20 text-on-surface-variant hover:text-error transition-colors">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+<!-- Inline Restock Modal Popover for Tata Safari -->
+<div class="absolute right-4 top-14 z-30 w-80 p-space-md rounded-xl bg-surface-container-highest shadow-2xl flex flex-col gap-space-md text-left">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-secondary text-[18px]">inventory_2</span>
+<span class="font-headline-md text-body-md font-bold text-on-surface">Restock Vehicle Units</span>
+</div>
+<span class="font-label-caps text-label-caps text-secondary uppercase bg-secondary/10 px-2 py-0.5 rounded">P1 PO</span>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-lowest flex items-center justify-between">
+<span class="font-data-mono-md text-data-mono-md text-outline">Tata Safari Adv+</span>
+<span class="font-data-mono-md text-data-mono-md text-tertiary">IN-STOCK: 1</span>
+</div>
+<div class="flex flex-col gap-space-xs">
+<div class="flex justify-between items-center">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Intake Increment</span>
+<span class="font-data-mono-md text-data-mono-md text-secondary">+5 Units</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="w-8 h-8 rounded bg-surface-container-low text-on-surface flex items-center justify-center font-data-mono-md text-data-mono-md font-bold hover:bg-surface-container">-</button>
+<input class="w-full bg-surface-container-lowest text-center font-data-mono-lg text-data-mono-lg text-on-surface py-1 rounded outline-none" type="number" value="5"/>
+<button class="w-8 h-8 rounded bg-surface-container-low text-on-surface flex items-center justify-center font-data-mono-md text-data-mono-md font-bold hover:bg-surface-container">+</button>
+</div>
+</div>
+<div class="p-2 rounded bg-surface-container-lowest flex flex-col gap-1">
+<span class="font-label-caps text-label-caps text-outline uppercase">API Dispatch Target</span>
+<span class="font-data-mono-md text-body-sm text-primary">POST /api/vehicles/MAT623/restock</span>
+</div>
+<div class="flex items-center gap-2 pt-1">
+<button class="flex-1 py-2 rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface font-headline-md text-body-sm">Cancel</button>
+<button class="flex-1 py-2 rounded-lg bg-secondary text-on-secondary font-headline-md text-body-sm font-bold shadow-md hover:brightness-105 transition-all">Confirm (+5)</button>
+</div>
+</div>
+</td>
+</tr>
+<!-- Row 3: Mahindra Scorpio-N Z8 -->
+<tr class="hover:bg-surface-container transition-colors group">
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-md min-w-[240px]">
+<div class="w-16 h-11 rounded-lg bg-surface-container-high overflow-hidden shrink-0 shadow-sm relative">
+<img class="w-full h-full object-cover" data-alt="Front profile of a deep black 2024 Mahindra Scorpio-N Z8 luxury edition parked under cool architectural LED lighting in a dark modern vehicle hangar with reflections on polished granite." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDIEQTVGwaaKvwJfmC3wnY5P5cVUq6TB9UzehHjOZqOeA3pxlqyGlHoaWKM1tUVIaSD5bIRObdGNqFd8iQ7XV3KlWUsPFtntJIXfxENoCMXDZYXNAA7uiIpg2D8lxgtkLHZklfxiNLb8MLRXZ1XR_F6rpHtNNFsqjmLZvBjoXWH_O9ecNobQ1e7G0CxvV_UzYhCei1j9cckmX15HtKqUOwiXPwfcsnRjhuUMVMWfwI"/>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-md text-body-lg font-bold text-on-surface truncate">2024 Mahindra Scorpio-N Z8</span>
+<span class="font-body-sm text-body-sm text-outline">mStallion Petrol 4XPLOR • AT</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<span class="font-data-mono-md text-data-mono-md text-on-surface-variant bg-surface-container-lowest px-2 py-1 rounded">MA1NB4E49RN02****</span>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<span class="px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-caps text-label-caps uppercase">SUV</span>
+</td>
+<td class="py-space-md px-space-md text-right whitespace-nowrap">
+<span class="font-data-mono-lg text-data-mono-lg text-on-surface font-bold">₹18,89,000</span>
+</td>
+<td class="py-space-md px-space-md text-center whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-tertiary/10 text-tertiary font-label-caps text-label-caps uppercase font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                  3 Units • Healthy
+                </span>
+</td>
+<td class="py-space-md px-space-md text-center whitespace-nowrap">
+<span class="font-data-mono-md text-data-mono-md text-on-surface">6 Days</span>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-tertiary">verified</span>
+<span class="font-data-mono-md text-data-mono-md text-tertiary font-semibold">100% Pass</span>
+</div>
+</td>
+<td class="py-space-md px-space-md text-right whitespace-nowrap">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-high text-primary hover:text-on-surface transition-colors" title="Restock +1">
+<span class="material-symbols-outlined text-[18px]">exposure_plus_1</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-error/20 text-on-surface-variant hover:text-error transition-colors">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 4: Tesla Model S Plaid -->
+<tr class="hover:bg-surface-container transition-colors group">
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-md min-w-[240px]">
+<div class="w-16 h-11 rounded-lg bg-surface-container-high overflow-hidden shrink-0 shadow-sm relative">
+<img class="w-full h-full object-cover" data-alt="Sleek midnight silver metallic 2024 Tesla Model S Plaid sedan inside a high-tech carbon telemetry garage with red illuminated status screens in the blurred background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCQyrQCILHBKP3o1rMOzM2N4LxuKsQY2e1L6QwqOp7GoyEdBLaTvOGEcmiFjL0OvNoape527Kx3RHrjUq7jIDHEJmge-ENOBvBf8yqmwPdb3z1cVdqo0rVEnjyA5w98EyooVYX-jfZ4moIrYpHktrAOWghTuvbiRVbpjyuABj2h9RvWLrV5Zy6UJEwDl8WMLXrAS4QOVUWLREwPjFoU5EgDOW5Ei1cqUtSAvtKwXI4"/>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-md text-body-lg font-bold text-on-surface truncate">2024 Tesla Model S Plaid</span>
+<span class="font-body-sm text-body-sm text-outline">Tri-Motor AWD • 1,020 HP</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<span class="font-data-mono-md text-data-mono-md text-on-surface-variant bg-surface-container-lowest px-2 py-1 rounded">5YJSA1E63PF88****</span>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<span class="px-2.5 py-1 rounded-full bg-surface-container-high text-primary font-label-caps text-label-caps uppercase">Luxury EV</span>
+</td>
+<td class="py-space-md px-space-md text-right whitespace-nowrap">
+<span class="font-data-mono-lg text-data-mono-lg text-on-surface font-bold">$89,990</span>
+</td>
+<td class="py-space-md px-space-md text-center whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-secondary/10 text-secondary font-label-caps text-label-caps uppercase font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+                  1 Unit • Low Stock
+                </span>
+</td>
+<td class="py-space-md px-space-md text-center whitespace-nowrap">
+<span class="font-data-mono-md text-data-mono-md text-on-surface">3 Days</span>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-tertiary">verified</span>
+<span class="font-data-mono-md text-data-mono-md text-tertiary font-semibold">100% Pass</span>
+</div>
+</td>
+<td class="py-space-md px-space-md text-right whitespace-nowrap">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-high text-primary hover:text-on-surface transition-colors" title="Restock +1">
+<span class="material-symbols-outlined text-[18px]">exposure_plus_1</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-error/20 text-on-surface-variant hover:text-error transition-colors">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 5: BMW M4 Competition -->
+<tr class="hover:bg-surface-container transition-colors group">
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-md min-w-[240px]">
+<div class="w-16 h-11 rounded-lg bg-surface-container-high overflow-hidden shrink-0 shadow-sm relative">
+<img class="w-full h-full object-cover" data-alt="2024 BMW M4 Competition coupe in Isle of Man green metallic with carbon ceramic brakes and carbon roof parked under dramatic studio downlighting in a dark automotive testing facility." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAI70hqZfsN3Q84seHY8UN_2TbaNJWl1eg2Q0IOwdXkEo6vJ1rGfYP2EGl1QPG16_6yQQcoXC45TT9PC_LMdtw5AIzPisMXJh__oHDa7ZDnpXVl1lSKGmYTLq4gUz8JxcTh0VCbYuUqT3tjnLbD-vIGLAu2kt_M2nLhJ3bHMrCKfia4A5FmXHvPxeHgBYW-s2sDTMSenjeJmXWbjsVcnrkGk7OdJYyoVEcm9roZ5Ms"/>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-md text-body-lg font-bold text-on-surface truncate">2024 BMW M4 Competition</span>
+<span class="font-body-sm text-body-sm text-outline">3.0L Twin-Turbo • M xDrive</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<span class="font-data-mono-md text-data-mono-md text-on-surface-variant bg-surface-container-lowest px-2 py-1 rounded">WBS43AZ07RFM1****</span>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<span class="px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-caps text-label-caps uppercase">Coupe</span>
+</td>
+<td class="py-space-md px-space-md text-right whitespace-nowrap">
+<span class="font-data-mono-lg text-data-mono-lg text-on-surface font-bold">$83,200</span>
+</td>
+<td class="py-space-md px-space-md text-center whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-tertiary/10 text-tertiary font-label-caps text-label-caps uppercase font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                  2 Units • Healthy
+                </span>
+</td>
+<td class="py-space-md px-space-md text-center whitespace-nowrap">
+<span class="font-data-mono-md text-data-mono-md text-on-surface">12 Days</span>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-tertiary">verified</span>
+<span class="font-data-mono-md text-data-mono-md text-tertiary font-semibold">100% Pass</span>
+</div>
+</td>
+<td class="py-space-md px-space-md text-right whitespace-nowrap">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-high text-primary hover:text-on-surface transition-colors" title="Restock +1">
+<span class="material-symbols-outlined text-[18px]">exposure_plus_1</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-error/20 text-on-surface-variant hover:text-error transition-colors">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 6: Hyundai Alcazar (Sold Out / Locked) -->
+<tr class="hover:bg-surface-container transition-colors group opacity-85">
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-md min-w-[240px]">
+<div class="w-16 h-11 rounded-lg bg-surface-container-high overflow-hidden shrink-0 shadow-sm relative">
+<img class="w-full h-full object-cover grayscale" data-alt="2024 Hyundai Alcazar premium 7-seater SUV in Titan Grey finish positioned under modern showroom canopy with subtle warm spotlighting, side profile view." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBXe9Ae7TDp-qnYWs7wJCWRKV57myxBhGTPv6IDkR32xwGa218nZGZk2dY9PUQKh4Qditz3crtHJCCmGkssbyPLjNj06KmXw6-gvRi4vYvGBX5u55hPTHBWwz_vAQWdjWJeTt0R0jy9j0_SUm9mWxv-cT70FO3u5RW1cZQRJfLUFVFB7Yu5rB4lIZpHUHwenwrvnafR4r9Jwlysv70tRdcauXXRoPZDUum3gHfiZxs"/>
+<div class="absolute inset-0 bg-surface-container-lowest/60 flex items-center justify-center">
+<span class="material-symbols-outlined text-error text-[16px]">lock</span>
+</div>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-md text-body-lg font-bold text-on-surface truncate">2024 Hyundai Alcazar</span>
+<span class="font-body-sm text-body-sm text-outline">Signature 1.5L Turbo Petrol • 7S DCT</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<span class="font-data-mono-md text-data-mono-md text-on-surface-variant bg-surface-container-lowest px-2 py-1 rounded">MALCA71UPRC56****</span>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<span class="px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-caps text-label-caps uppercase">SUV</span>
+</td>
+<td class="py-space-md px-space-md text-right whitespace-nowrap">
+<span class="font-data-mono-lg text-data-mono-lg text-on-surface font-bold">₹20,65,000</span>
+</td>
+<td class="py-space-md px-space-md text-center whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-error/10 text-error font-label-caps text-label-caps uppercase font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+                  0 Units • Out of Stock
+                </span>
+</td>
+<td class="py-space-md px-space-md text-center whitespace-nowrap">
+<span class="font-data-mono-md text-data-mono-md text-outline">14 Days</span>
+</td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-error">lock_clock</span>
+<span class="font-data-mono-md text-data-mono-md text-error font-semibold">Purchase Locked</span>
+</div>
+</td>
+<td class="py-space-md px-space-md text-right whitespace-nowrap">
+<div class="flex items-center justify-end gap-1">
+<button class="px-space-sm py-1 rounded bg-primary-container text-on-primary-container font-headline-md text-body-sm font-semibold hover:bg-primary-container/90 transition-colors">
+                    Restock Intake
+                  </button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="p-1.5 rounded bg-surface-container hover:bg-error/20 text-on-surface-variant hover:text-error transition-colors">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Footnote & Pagination Quick Strip -->
+<div class="p-space-md bg-surface-container-lowest flex flex-col sm:flex-row items-center justify-between gap-space-sm">
+<div class="flex items-center gap-space-md">
+<span class="font-data-mono-md text-data-mono-md text-outline">Showing 6 of 24 Live Units</span>
+<span class="text-outline-variant">•</span>
+<span class="font-label-caps text-label-caps text-primary uppercase">Yard Slot Filter: Active</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-3 py-1 rounded bg-surface-container-low text-outline hover:text-on-surface font-data-mono-md text-data-mono-md disabled:opacity-40" disabled="">PREV</button>
+<span class="font-data-mono-md text-data-mono-md text-on-surface px-2">PAGE 1 / 4</span>
+<button class="px-3 py-1 rounded bg-surface-container-low text-on-surface-variant hover:text-on-surface font-data-mono-md text-data-mono-md">NEXT</button>
+</div>
+</div>
+</div>
+<!-- Telemetry & Security Audit Footer Badge -->
+<div class="p-space-md rounded-xl bg-surface-container-lowest flex flex-col md:flex-row items-center justify-between gap-space-md shadow-sm">
+<div class="flex items-center gap-space-md flex-wrap">
+<div class="flex items-center gap-space-xs text-tertiary">
+<span class="material-symbols-outlined text-[20px]">verified_user</span>
+<span class="font-data-mono-md text-data-mono-md font-bold">TDD Mutex Lock Active</span>
+</div>
+<span class="text-outline-variant">•</span>
+<span class="font-data-mono-md text-data-mono-md text-on-surface-variant">ISO-3779 VIN Verified</span>
+<span class="text-outline-variant">•</span>
+<span class="font-data-mono-md text-data-mono-md text-outline">CRC32 Checksum: <span class="text-primary font-mono">0x9F41E8B2</span></span>
+</div>
+<div class="flex items-center gap-space-md">
+<span class="font-label-caps text-label-caps text-outline uppercase tracking-wider">Apex Ops Engine v3.8.4</span>
+<span class="w-2 h-2 rounded-full bg-tertiary animate-ping"></span>
+</div>
+</div>
+</div>
+</div></main></div></body></html>

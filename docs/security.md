@@ -18,7 +18,7 @@
 
 - Set a unique, random `JWT_SECRET` in the deployment environment; do not commit `.env`.
 - Serve production traffic through HTTPS. Configure `TRUST_PROXY_HOPS` only to the exact number of controlled proxies, not arbitrary client-provided forwarded headers.
-- Back up the persistent SQLite volume. The supported deployment is one application instance; SQLite and the in-memory rate limiter are not shared across replicas.
+- Back up the selected database. SQLite is for one application instance; PostgreSQL supports shared database access, but the in-memory rate limiter is still not shared across replicas.
 - Rotate the JWT secret deliberately: existing tokens become invalid.
 - Configure `AI_BASE_URL` only for a trusted HTTPS provider endpoint. Keep `AI_API_KEY` in the deployment secret store; never add it to frontend variables or source control.
 
@@ -26,7 +26,7 @@
 
 - The browser stores the bearer token in `localStorage`, which is readable by same-origin JavaScript. This project has a restrictive Helmet CSP, but any XSS can still steal the token. A production deployment should consider short-lived access tokens with a secure `HttpOnly`, `Secure`, `SameSite` cookie and appropriate CSRF protection, or another reviewed session design.
 - The auth rate limiter uses in-memory counters and is not distributed; apply equivalent limits at a trusted edge if scaling.
-- CORS is not enabled because the current frontend and API are same-origin. If deployed on separate origins, configure a strict allowlist before enabling cross-origin access.
+- CORS is restricted to exact origins in `CORS_ORIGINS`; configure only trusted website origins for separate frontend/API deployments.
 - Natural-language searches may contain personal information entered by users. The deterministic default keeps these searches local; operators who enable an external provider should disclose its data handling and retention terms to users.
-- SQLite stores money as `REAL`; use integer cents or a fixed-precision database type before treating this as a financial system.
+- Both database schemas currently store money as floating-point values; use integer minor units or a fixed-precision type before treating this as a financial system.
 - No external dependency scanning report, penetration test, managed-secret integration, or live deployment is claimed by this document.

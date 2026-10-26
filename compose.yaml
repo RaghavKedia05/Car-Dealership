@@ -16,6 +16,9 @@ services:
       NODE_ENV: production
       PORT: "3001"
       DATABASE_PATH: /app/data/dealership.db
+      DATABASE_URL: "${DATABASE_URL:-}"
+      DATABASE_POOL_MAX: "${DATABASE_POOL_MAX:-5}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-}"
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       TRUST_PROXY_HOPS: "${TRUST_PROXY_HOPS:-0}"
       AI_PROVIDER: "${AI_PROVIDER:-deterministic}"
