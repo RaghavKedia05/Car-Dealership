@@ -1,10 +1,16 @@
-const { randomUUID } = require('node:crypto');
+const { createHash, createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } = require('node:crypto');
 const path = require('node:path');
 const bcrypt = require('bcryptjs');
 const express = require('express');
 const { rateLimit } = require('express-rate-limit');
 const helmet = require('helmet');
 const jwt = require('jsonwebtoken');
+const {
+  isValidPaymentSignature,
+  isValidSignature,
+  paymentConfigured,
+  razorpayRequest,
+} = require('./payments');
 const { z, ZodError } = require('zod');
 const {
   buildComparison,
@@ -27,6 +33,31 @@ const registrationSchema = z.object({
 const loginSchema = z.object({
   email: z.string().trim().email().max(254).transform((email) => email.toLowerCase()),
   password: z.string().min(1),
+});
+
+const accountProfileSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  phone: z.string().trim().max(20).regex(/^[+\d(). -]*$/),
+  deliveryAddress: z.string().trim().max(500),
+});
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(72),
+  newPassword: passwordSchema,
+});
+
+const forgotPasswordSchema = z.object({
+  email: z.string().trim().email().max(254).transform((email) => email.toLowerCase()),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(32).max(100),
+  password: passwordSchema,
+});
+
+const registrationOtpSchema = z.object({
+  email: z.string().trim().email().max(254).transform((email) => email.toLowerCase()),
+  code: z.string().regex(/^\d{6}$/),
 });
 
 const vehicleSchema = z.object({
@@ -75,6 +106,18 @@ const restockSchema = z.object({
   quantity: z.number().int().positive().max(1_000_000),
 });
 
+const checkoutSchema = z.object({
+  customerName: z.string().trim().min(2).max(80),
+  email: z.string().trim().email().max(254).transform((email) => email.toLowerCase()),
+  phone: z.string().trim().min(7).max(20).regex(/^[+\d(). -]+$/),
+  deliveryAddress: z.string().trim().min(8).max(500),
+});
+
+const paymentVerificationSchema = z.object({
+  paymentId: z.string().min(5).max(80),
+  signature: z.string().min(20).max(200),
+});
+
 const publicVehicleQuerySchema = vehicleQuerySchema.safeExtend({
   keyword: z.string().trim().max(120).optional(),
   sortBy: z.enum(['make', 'model', 'category', 'price', 'createdAt', 'year']).default('createdAt'),
@@ -104,7 +147,79 @@ const enquiryStatusSchema = z.object({
 });
 
 function publicUser(user) {
-  return { id: user.id, name: user.name, email: user.email, role: user.role };
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    phone: user.phone || '',
+    deliveryAddress: user.delivery_address || '',
+  };
+}
+
+async function sendPasswordResetEmail(email, token) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const sender = process.env.PASSWORD_RESET_FROM;
+  const appOrigin = process.env.APP_ORIGIN;
+  if (!apiKey || !sender || !appOrigin) return false;
+
+  let parsedOrigin;
+  try {
+    parsedOrigin = new URL(appOrigin);
+  } catch {
+    throw new Error('APP_ORIGIN must be a valid HTTPS origin');
+  }
+  if (parsedOrigin.protocol !== 'https:' || parsedOrigin.origin !== appOrigin) {
+    throw new Error('APP_ORIGIN must be an exact HTTPS origin');
+  }
+
+  const resetUrl = new URL('/reset-password', parsedOrigin);
+  resetUrl.searchParams.set('token', token);
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: sender,
+      to: [email],
+      subject: 'Reset your Apex Auto password',
+      text: `Use this secure link to reset your Apex Auto password. It expires in 30 minutes: ${resetUrl.toString()} If you did not request this, ignore this email.`,
+      html: `<p>Use the link below to reset your Apex Auto password. It expires in 30 minutes.</p><p><a href="${resetUrl.toString()}">Reset password</a></p><p>If you did not request this, you can ignore this email.</p>`,
+    }),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Password reset email provider returned HTTP ${response.status}: ${detail.slice(0, 200)}`);
+  }
+  return true;
+}
+
+async function sendRegistrationCodeEmail(email, code) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const sender = process.env.PASSWORD_RESET_FROM;
+  if (!apiKey || !sender) return false;
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: sender,
+      to: [email],
+      subject: 'Your Apex Auto verification code',
+      text: `Your Apex Auto email verification code is ${code}. It expires in 10 minutes. If you did not request this, ignore this email.`,
+      html: `<p>Your Apex Auto email verification code is:</p><p style="font-size:28px;font-weight:700;letter-spacing:8px">${code}</p><p>This code expires in 10 minutes. If you did not request this, ignore this email.</p>`,
+    }),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Registration email provider returned HTTP ${response.status}: ${detail.slice(0, 200)}`);
+  }
+  return true;
 }
 
 function toVehicle(row) {
@@ -205,6 +320,8 @@ function createApp({
     contentSecurityPolicy: {
       directives: {
         imgSrc: ["'self'", 'data:', 'https:'],
+        scriptSrc: ["'self'", 'https://checkout.razorpay.com'],
+        frameSrc: ["'self'", 'https://api.razorpay.com', 'https://checkout.razorpay.com'],
       },
     },
   }));
@@ -224,6 +341,7 @@ function createApp({
     if (req.method === 'OPTIONS') return res.status(204).end();
     return next();
   });
+  app.use('/api/payments/razorpay/webhook', express.raw({ type: 'application/json', limit: '64kb' }));
   app.use(express.json({ limit: '32kb' }));
 
   const authLimiter = rateLimit({
@@ -249,6 +367,27 @@ function createApp({
     legacyHeaders: false,
     handler: (_req, res) => res.status(429).json({ error: 'Too many enquiries. Please try again later.' }),
   });
+  const checkoutLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 5,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    handler: (_req, res) => res.status(429).json({ error: 'Too many checkout attempts. Please try again later.' }),
+  });
+  const passwordResetLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 5,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    handler: (_req, res) => res.status(429).json({ error: 'Too many password recovery attempts. Please try again later.' }),
+  });
+  const registrationOtpLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    handler: (_req, res) => res.status(429).json({ error: 'Too many verification attempts. Please try again later.' }),
+  });
 
   app.get('/healthz', async (_req, res) => {
     await db.get('SELECT 1');
@@ -272,8 +411,10 @@ function createApp({
       return res.status(401).json({ error: 'Please sign in again to continue' });
     }
 
-    const user = await db.get('SELECT id, name, email, role, status FROM users WHERE id = ?', claims.sub);
-    if (!user || user.status !== 'active') return res.status(401).json({ error: 'Invalid or expired token' });
+    const user = await db.get('SELECT id, name, email, role, status, phone, delivery_address, auth_version FROM users WHERE id = ?', claims.sub);
+    if (!user || user.status !== 'active' || claims.ver !== user.auth_version) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
     if (await db.get('SELECT 1 FROM revoked_tokens WHERE token_id = ?', claims.jti)) {
       return res.status(401).json({ error: 'This session has been signed out' });
     }
@@ -333,45 +474,266 @@ function createApp({
   app.post('/api/auth/register', authLimiter, async (req, res) => {
     const input = validate(registrationSchema, req.body, res);
     if (!input) return;
+    if (!process.env.RESEND_API_KEY || !process.env.PASSWORD_RESET_FROM) {
+      return res.status(503).json({ error: 'Email verification is not configured yet. Please contact the dealership.' });
+    }
+    if (await db.get('SELECT 1 FROM users WHERE LOWER(email) = LOWER(?)', input.email)) {
+      return res.status(409).json({ error: 'An account with that email already exists' });
+    }
+
+    const now = Date.now();
+    const code = String(randomInt(100000, 1000000));
+    const codeHash = createHmac('sha256', jwtSecret).update(`${input.email}:${code}`).digest('hex');
+    const passwordHash = await bcrypt.hash(input.password, 12);
+    const challenge = await db.transaction(async (tx) => {
+      await tx.run('DELETE FROM registration_verifications WHERE expires_at <= ?', now);
+      const existing = await tx.get('SELECT id, sent_at FROM registration_verifications WHERE email = ?', input.email);
+      if (existing && now - existing.sent_at < 60_000) return { state: 'cooldown' };
+      if (existing) {
+        await tx.run(`
+          UPDATE registration_verifications
+          SET name = ?, password_hash = ?, code_hash = ?, expires_at = ?, attempts = 0, sent_at = ?
+          WHERE id = ?
+        `, input.name, passwordHash, codeHash, now + 10 * 60 * 1000, now, existing.id);
+        return { state: 'send', id: existing.id };
+      }
+      const id = randomUUID();
+      await tx.run(`
+        INSERT INTO registration_verifications
+          (id, email, name, password_hash, code_hash, expires_at, attempts, sent_at)
+        VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+      `, id, input.email, input.name, passwordHash, codeHash, now + 10 * 60 * 1000, now);
+      return { state: 'send', id };
+    });
+    if (challenge.state === 'cooldown') {
+      return res.status(429).json({ error: 'A code was just sent. Wait one minute before requesting another.' });
+    }
 
     try {
+      await sendRegistrationCodeEmail(input.email, code);
+    } catch (error) {
+      await db.run('DELETE FROM registration_verifications WHERE id = ? AND code_hash = ?', challenge.id, codeHash);
+      console.error('Could not send registration verification code:', error.message);
+      return res.status(502).json({ error: 'We could not send your verification code. Please try again shortly.' });
+    }
+    return res.status(202).json({ message: 'A six-digit verification code was sent to your email address.' });
+  });
+
+  app.post('/api/auth/register/verify', registrationOtpLimiter, async (req, res) => {
+    const input = validate(registrationOtpSchema, req.body, res);
+    if (!input) return;
+    const now = Date.now();
+    const submittedHash = createHmac('sha256', jwtSecret).update(`${input.email}:${input.code}`).digest('hex');
+    const outcome = await db.transaction(async (tx) => {
+      if (await tx.get('SELECT 1 FROM users WHERE LOWER(email) = LOWER(?)', input.email)) {
+        return { state: 'duplicate' };
+      }
+      const challenge = await tx.get(
+        'SELECT id, name, email, password_hash, code_hash, expires_at, attempts FROM registration_verifications WHERE email = ?',
+        input.email,
+      );
+      if (!challenge || challenge.expires_at <= now) {
+        if (challenge) await tx.run('DELETE FROM registration_verifications WHERE id = ?', challenge.id);
+        return { state: 'invalid' };
+      }
+      if (challenge.attempts >= 5) return { state: 'locked' };
+      const expectedHash = Buffer.from(challenge.code_hash, 'hex');
+      const actualHash = Buffer.from(submittedHash, 'hex');
+      if (expectedHash.length !== actualHash.length || !timingSafeEqual(expectedHash, actualHash)) {
+        await tx.run('UPDATE registration_verifications SET attempts = attempts + 1 WHERE id = ?', challenge.id);
+        return { state: 'invalid' };
+      }
+      const consumed = await tx.run(
+        'DELETE FROM registration_verifications WHERE id = ? AND code_hash = ? AND expires_at > ? AND attempts < 5',
+        challenge.id, challenge.code_hash, now,
+      );
+      if (!consumed.changes) return { state: 'invalid' };
       const user = {
         id: randomUUID(),
-        name: input.name,
-        email: input.email,
-        passwordHash: await bcrypt.hash(input.password, 12),
+        name: challenge.name,
+        email: challenge.email,
+        password_hash: challenge.password_hash,
+        role: 'user',
+        status: 'active',
+        auth_version: 0,
       };
-      await db.run(`
+      await tx.run(`
         INSERT INTO users (id, name, email, password_hash, updated_at)
         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, user.id, user.name, user.email, user.passwordHash);
-      return res.status(201).json({
-        user: publicUser({ ...user, role: 'user' }),
-      });
-    } catch (error) {
-      if ((error.code === 'ERR_SQLITE_ERROR' && /UNIQUE constraint failed: users\.email/i.test(error.message))
-        || (error.code === '23505' && error.constraint === 'users_email_lower_key')) {
-        return res.status(409).json({ error: 'An account with that email already exists' });
-      }
-      throw error;
+      `, user.id, user.name, user.email, user.password_hash);
+      return { state: 'verified', user };
+    });
+    if (outcome.state === 'locked') {
+      return res.status(429).json({ error: 'Too many incorrect codes. Request a new verification code.' });
     }
+    if (outcome.state === 'duplicate') {
+      return res.status(409).json({ error: 'An account with that email already exists' });
+    }
+    if (outcome.state === 'invalid') {
+      return res.status(400).json({ error: 'That verification code is invalid or expired. Request a new one.' });
+    }
+
+    const token = jwt.sign({ ver: outcome.user.auth_version }, jwtSecret, {
+      subject: outcome.user.id,
+      expiresIn: '8h',
+      jwtid: randomUUID(),
+    });
+    return res.status(201).json({ token, user: publicUser(outcome.user) });
   });
 
   app.post('/api/auth/login', authLimiter, async (req, res) => {
     const input = validate(loginSchema, req.body, res);
     if (!input) return;
 
-    const user = await db.get('SELECT id, name, email, role, status, password_hash FROM users WHERE LOWER(email) = LOWER(?)', input.email);
+    const user = await db.get('SELECT id, name, email, role, status, password_hash, phone, delivery_address, auth_version FROM users WHERE LOWER(email) = LOWER(?)', input.email);
     if (!user || user.status !== 'active' || !(await bcrypt.compare(input.password, user.password_hash))) {
       return res.status(401).json({ error: 'Email or password is incorrect' });
     }
 
-    const token = jwt.sign({}, jwtSecret, {
+    const token = jwt.sign({ ver: user.auth_version }, jwtSecret, {
       subject: user.id,
       expiresIn: '8h',
       jwtid: randomUUID(),
     });
     return res.json({ token, user: publicUser(user) });
+  });
+
+  app.get('/api/account', requireAuth, (req, res) => res.json({ user: publicUser(req.user) }));
+
+  app.put('/api/account', requireAuth, async (req, res) => {
+    const input = validate(accountProfileSchema, req.body, res);
+    if (!input) return;
+    await db.run(`
+      UPDATE users SET name = ?, phone = ?, delivery_address = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, input.name, input.phone || null, input.deliveryAddress || null, req.user.id);
+    const user = await db.get(
+      'SELECT id, name, email, role, phone, delivery_address FROM users WHERE id = ?',
+      req.user.id,
+    );
+    return res.json({ user: publicUser(user) });
+  });
+
+  app.get('/api/account/orders', requireAuth, async (req, res) => {
+    const completed = await db.all(`
+      SELECT p.id, p.total_amount AS unit_price, p.created_at, 'paid' AS status,
+             c.razorpay_payment_id, COALESCE(c.customer_name, u.name) AS customer_name,
+             COALESCE(c.email, u.email) AS email, COALESCE(c.phone, u.phone, '') AS phone,
+             COALESCE(c.delivery_address, u.delivery_address, '') AS delivery_address,
+             v.id AS vehicle_id, v.make, v.model, v.vehicle_year, v.image_url
+      FROM purchases p
+      JOIN users u ON u.id = p.user_id
+      JOIN vehicles v ON v.id = p.vehicle_id
+      LEFT JOIN checkout_orders c ON c.id = p.checkout_order_id
+      WHERE p.user_id = ?
+    `, req.user.id);
+    const outstanding = await db.all(`
+      SELECT c.id, c.vehicle_id, c.customer_name, c.email, c.phone, c.delivery_address,
+             c.unit_price, c.status, c.razorpay_payment_id, c.created_at,
+             v.make, v.model, v.vehicle_year, v.image_url
+      FROM checkout_orders c
+      JOIN vehicles v ON v.id = c.vehicle_id
+      WHERE c.user_id = ? AND c.status IN ('pending', 'refunded', 'refunding', 'expired')
+        AND NOT EXISTS (SELECT 1 FROM purchases p WHERE p.checkout_order_id = c.id)
+    `, req.user.id);
+    const rows = [...completed, ...outstanding].sort((left, right) => (
+      new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+    ));
+    return res.json({ orders: rows.map((row) => ({
+      id: row.id,
+      status: row.status,
+      totalAmount: row.unit_price,
+      paymentId: row.razorpay_payment_id,
+      createdAt: row.created_at,
+      customerName: row.customer_name,
+      email: row.email,
+      phone: row.phone,
+      deliveryAddress: row.delivery_address,
+      vehicle: {
+        id: row.vehicle_id,
+        make: row.make,
+        model: row.model,
+        year: row.vehicle_year,
+        imageUrl: row.image_url,
+      },
+    })) });
+  });
+
+  app.post('/api/account/password', requireAuth, async (req, res) => {
+    const input = validate(changePasswordSchema, req.body, res);
+    if (!input) return;
+    const account = await db.get('SELECT password_hash, auth_version FROM users WHERE id = ?', req.user.id);
+    if (!account || !(await bcrypt.compare(input.currentPassword, account.password_hash))) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+    const passwordHash = await bcrypt.hash(input.newPassword, 12);
+    await db.run(`
+      UPDATE users SET password_hash = ?, auth_version = auth_version + 1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, passwordHash, req.user.id);
+    const user = await db.get(
+      'SELECT id, name, email, role, phone, delivery_address, auth_version FROM users WHERE id = ?',
+      req.user.id,
+    );
+    const token = jwt.sign({ ver: user.auth_version }, jwtSecret, {
+      subject: user.id,
+      expiresIn: '8h',
+      jwtid: randomUUID(),
+    });
+    return res.json({ token, user: publicUser(user) });
+  });
+
+  app.post('/api/auth/forgot-password', passwordResetLimiter, async (req, res) => {
+    const input = validate(forgotPasswordSchema, req.body, res);
+    if (!input) return;
+    const responseMessage = 'If an account matches that email and recovery email is configured, a reset link will arrive shortly.';
+    const user = await db.get('SELECT id, email FROM users WHERE LOWER(email) = LOWER(?)', input.email);
+    if (user && process.env.RESEND_API_KEY && process.env.PASSWORD_RESET_FROM && process.env.APP_ORIGIN) {
+      const token = randomBytes(32).toString('base64url');
+      const tokenHash = createHash('sha256').update(token).digest('hex');
+      await db.transaction(async (tx) => {
+        await tx.run('DELETE FROM password_reset_tokens WHERE user_id = ?', user.id);
+        await tx.run(`
+          INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at)
+          VALUES (?, ?, ?, ?)
+        `, randomUUID(), user.id, tokenHash, Date.now() + 30 * 60 * 1000);
+      });
+      try {
+        await sendPasswordResetEmail(user.email, token);
+      } catch (error) {
+        await db.run('DELETE FROM password_reset_tokens WHERE user_id = ?', user.id);
+        console.error('Could not send password reset email:', error.message);
+      }
+    }
+    return res.json({ message: responseMessage });
+  });
+
+  app.post('/api/auth/reset-password', passwordResetLimiter, async (req, res) => {
+    const input = validate(resetPasswordSchema, req.body, res);
+    if (!input) return;
+    const tokenHash = createHash('sha256').update(input.token).digest('hex');
+    const passwordHash = await bcrypt.hash(input.password, 12);
+    const now = Date.now();
+    const changed = await db.transaction(async (tx) => {
+      const token = await tx.get(`
+        SELECT id, user_id FROM password_reset_tokens
+        WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?
+      `, tokenHash, now);
+      if (!token) return false;
+      const claimed = await tx.run(`
+        UPDATE password_reset_tokens SET used_at = ?
+        WHERE id = ? AND used_at IS NULL AND expires_at > ?
+      `, now, token.id, now);
+      if (!claimed.changes) return false;
+      await tx.run(`
+        UPDATE users SET password_hash = ?, auth_version = auth_version + 1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `, passwordHash, token.user_id);
+      await tx.run('DELETE FROM password_reset_tokens WHERE user_id = ? AND id <> ?', token.user_id, token.id);
+      return true;
+    });
+    if (!changed) return res.status(400).json({ error: 'This reset link is invalid or has expired. Request a new one.' });
+    return res.json({ message: 'Password updated. Sign in with your new password.' });
   });
 
   async function listVehicles(req, res, { publicOnly = false } = {}) {
@@ -494,6 +856,10 @@ function createApp({
     const input = validate(vehicleSchema, req.body, res);
     if (!input) return;
 
+    if (await db.get("SELECT 1 FROM checkout_orders WHERE vehicle_id = ? AND status IN ('pending', 'processing') LIMIT 1", req.params.id)) {
+      return res.status(409).json({ error: 'A customer has an active reservation for this vehicle. Try again after checkout ends.' });
+    }
+
     const result = await db.run(`
       UPDATE vehicles
       SET make = ?, model = ?, category = ?, price = ?, quantity = ?, body_type = ?,
@@ -517,6 +883,10 @@ function createApp({
   });
 
   app.delete('/api/vehicles/:id', requireAuth, requireAdmin, async (req, res) => {
+    const hasCheckouts = await db.get('SELECT 1 FROM checkout_orders WHERE vehicle_id = ? LIMIT 1', req.params.id);
+    if (hasCheckouts) {
+      return res.status(409).json({ error: 'Vehicle has checkout history and cannot be deleted' });
+    }
     const hasPurchases = await db.get('SELECT 1 FROM purchases WHERE vehicle_id = ? LIMIT 1', req.params.id);
     if (hasPurchases) {
       return res.status(409).json({ error: 'Vehicle has purchase history and cannot be deleted' });
@@ -527,40 +897,246 @@ function createApp({
     return res.status(204).end();
   });
 
-  app.post('/api/vehicles/:id/purchase', requireAuth, async (req, res) => {
-    const outcome = await db.transaction(async (tx) => {
-      const vehicle = await tx.get(`
-        SELECT id, price FROM vehicles WHERE id = ? AND (? = 'admin' OR status = 'listed')
-      `, req.params.id, req.user.role);
-      if (!vehicle) return { status: 404, error: 'Vehicle not found' };
+  async function releaseCheckout(checkoutId, userId) {
+    return db.transaction(async (tx) => {
+      const checkout = await tx.get(
+        "SELECT vehicle_id FROM checkout_orders WHERE id = ? AND user_id = ? AND status = 'pending'",
+        checkoutId,
+        userId,
+      );
+      if (!checkout) return false;
+      const result = await tx.run(
+        "UPDATE checkout_orders SET status = 'cancelled' WHERE id = ? AND status = 'pending'",
+        checkoutId,
+      );
+      if (!result.changes) return false;
+      await tx.run('UPDATE vehicles SET quantity = quantity + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?', checkout.vehicle_id);
+      return true;
+    });
+  }
 
-      const result = await tx.run(`
-        UPDATE vehicles
-        SET quantity = quantity - 1, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND quantity > 0
-      `, req.params.id);
-      if (result.changes === 0) return { status: 409, error: 'Vehicle is out of stock' };
+  async function refundPayment(paymentId, checkoutId) {
+    const existing = await db.get('SELECT status FROM checkout_orders WHERE id = ?', checkoutId);
+    if (!existing || existing.status === 'refunded' || existing.status === 'refunding') return;
+    const claimed = await db.run(
+      "UPDATE checkout_orders SET status = 'refunding' WHERE id = ? AND status IN ('expired', 'cancelled')",
+      checkoutId,
+    );
+    if (!claimed.changes) return;
+    try {
+      const payment = await razorpayRequest(`/payments/${encodeURIComponent(paymentId)}`);
+      if (payment.amount_refunded < payment.amount) {
+        await razorpayRequest(`/payments/${encodeURIComponent(paymentId)}/refund`, {
+          method: 'POST',
+          body: JSON.stringify({
+            amount: payment.amount,
+            notes: { checkout_id: checkoutId, reason: 'Checkout expired or stock reservation was released' },
+          }),
+        });
+      }
+      await db.run("UPDATE checkout_orders SET status = 'refunded' WHERE id = ? AND status = 'refunding'", checkoutId);
+    } catch (error) {
+      await db.run("UPDATE checkout_orders SET status = 'expired' WHERE id = ? AND status = 'refunding'", checkoutId);
+      throw error;
+    }
+  }
+
+  async function completeCheckout(checkout, payment) {
+    if (payment.order_id !== checkout.razorpay_order_id
+      || Number(payment.amount) !== Number(checkout.amount_minor)
+      || payment.currency !== 'INR'
+      || payment.status !== 'captured') {
+      throw new Error('Payment could not be confirmed as captured for this checkout');
+    }
+
+    const outcome = await db.transaction(async (tx) => {
+      const current = await tx.get('SELECT * FROM checkout_orders WHERE id = ?', checkout.id);
+      if (!current) return { state: 'missing' };
+      if (current.status === 'paid') {
+        const existingPurchase = await tx.get(
+          'SELECT id FROM purchases WHERE user_id = ? AND vehicle_id = ? ORDER BY created_at DESC LIMIT 1',
+          current.user_id,
+          current.vehicle_id,
+        );
+        return { state: 'paid', checkout: current, purchaseId: existingPurchase?.id || null };
+      }
+      if (current.status !== 'pending' || current.expires_at <= Date.now()) {
+        if (current.status === 'pending') {
+          await tx.run("UPDATE checkout_orders SET status = 'expired' WHERE id = ? AND status = 'pending'", current.id);
+          await tx.run('UPDATE vehicles SET quantity = quantity + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?', current.vehicle_id);
+        }
+        return { state: 'refund', checkout: current };
+      }
+
+      const claimed = await tx.run(
+        "UPDATE checkout_orders SET status = 'processing' WHERE id = ? AND status = 'pending'",
+        current.id,
+      );
+      if (!claimed.changes) {
+        const latest = await tx.get('SELECT * FROM checkout_orders WHERE id = ?', current.id);
+        if (latest?.status === 'paid') {
+          const existingPurchase = await tx.get(
+            'SELECT id FROM purchases WHERE user_id = ? AND vehicle_id = ? ORDER BY created_at DESC LIMIT 1',
+            latest.user_id,
+            latest.vehicle_id,
+          );
+          return { state: 'paid', checkout: latest, purchaseId: existingPurchase?.id || null };
+        }
+        return { state: 'refund', checkout: latest || current };
+      }
 
       const purchaseId = randomUUID();
       await tx.run(`
-        INSERT INTO purchases (id, vehicle_id, user_id, quantity, unit_price, total_amount)
-        VALUES (?, ?, ?, 1, ?, ?)
-      `, purchaseId, vehicle.id, req.user.id, vehicle.price, vehicle.price);
-      const updatedVehicle = toVehicle(await tx.get('SELECT * FROM vehicles WHERE id = ?', req.params.id));
-      return {
-        vehicle: updatedVehicle,
-        purchase: {
-          id: purchaseId,
-          vehicleId: vehicle.id,
-          quantity: 1,
-          unitPrice: vehicle.price,
-          totalAmount: vehicle.price,
-        },
-      };
+        INSERT INTO purchases (id, vehicle_id, user_id, quantity, unit_price, total_amount, checkout_order_id)
+        VALUES (?, ?, ?, 1, ?, ?, ?)
+      `, purchaseId, current.vehicle_id, current.user_id, current.unit_price, current.unit_price, current.id);
+      await tx.run(`
+        UPDATE checkout_orders
+        SET status = 'paid', razorpay_payment_id = ?
+        WHERE id = ? AND status = 'processing'
+      `, payment.id, current.id);
+      return { state: 'paid', checkout: current, purchaseId };
     });
-    if (outcome.error) return res.status(outcome.status).json({ error: outcome.error });
-    return res.json(outcome);
+
+    if (outcome.state === 'refund') {
+      await refundPayment(payment.id, checkout.id);
+      return { state: 'refunded' };
+    }
+    if (outcome.state !== 'paid') return outcome;
+    const vehicle = toVehicle(await db.get('SELECT * FROM vehicles WHERE id = ?', outcome.checkout.vehicle_id));
+    return { state: 'paid', vehicle, purchaseId: outcome.purchaseId || null };
+  }
+
+  app.post('/api/vehicles/:id/checkout', requireAuth, checkoutLimiter, async (req, res) => {
+    if (!paymentConfigured()) {
+      return res.status(503).json({ error: 'Online checkout is not configured yet. Please contact the dealership.' });
+    }
+    const input = validate(checkoutSchema, req.body, res);
+    if (!input) return;
+
+    const checkoutId = randomUUID();
+    const now = Date.now();
+    const checkout = await db.transaction(async (tx) => {
+      const vehicle = await tx.get(
+        "SELECT id, make, model, price FROM vehicles WHERE id = ? AND status = 'listed' AND quantity > 0",
+        req.params.id,
+      );
+      if (!vehicle) return null;
+      const amountMinor = Math.round(vehicle.price * 100);
+      if (!Number.isSafeInteger(amountMinor) || amountMinor < 1) return null;
+      const unitPrice = amountMinor / 100;
+      const reserved = await tx.run(`
+        UPDATE vehicles SET quantity = quantity - 1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND status = 'listed' AND quantity > 0
+      `, vehicle.id);
+      if (!reserved.changes) return null;
+      await tx.run(`
+        INSERT INTO checkout_orders
+          (id, vehicle_id, user_id, customer_name, email, phone, delivery_address,
+           unit_price, amount_minor, status, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+      `, checkoutId, vehicle.id, req.user.id, input.customerName, input.email, input.phone,
+      input.deliveryAddress, unitPrice, amountMinor, now + 15 * 60 * 1000);
+      await tx.run(`
+        UPDATE users SET name = ?, phone = ?, delivery_address = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `, input.customerName, input.phone, input.deliveryAddress, req.user.id);
+      return { ...vehicle, price: unitPrice, amountMinor };
+    });
+    if (!checkout) return res.status(409).json({ error: 'This vehicle is no longer available. Please refresh the inventory.' });
+
+    try {
+      const order = await razorpayRequest('/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          amount: checkout.amountMinor,
+          currency: 'INR',
+          receipt: checkoutId,
+          notes: { checkout_id: checkoutId, vehicle_id: checkout.id },
+        }),
+      });
+      await db.run('UPDATE checkout_orders SET razorpay_order_id = ? WHERE id = ?', order.id, checkoutId);
+      return res.status(201).json({
+        checkoutId,
+        orderId: order.id,
+        keyId: process.env.RAZORPAY_KEY_ID,
+        amount: checkout.amountMinor,
+        currency: 'INR',
+        vehicle: { id: checkout.id, make: checkout.make, model: checkout.model, price: checkout.price },
+        customer: { name: input.customerName, email: input.email, phone: input.phone },
+      });
+    } catch (error) {
+      await releaseCheckout(checkoutId, req.user.id);
+      console.error('Could not create payment order:', error.message);
+      return res.status(502).json({ error: 'We could not start payment. Your vehicle reservation has been released; please try again.' });
+    }
   });
+
+  app.post('/api/checkout/:id/verify', requireAuth, checkoutLimiter, async (req, res) => {
+    const input = validate(paymentVerificationSchema, req.body, res);
+    if (!input) return;
+    const checkout = await db.get(
+      'SELECT * FROM checkout_orders WHERE id = ? AND user_id = ?',
+      req.params.id,
+      req.user.id,
+    );
+    if (!checkout?.razorpay_order_id) return res.status(404).json({ error: 'Checkout not found' });
+    if (!isValidPaymentSignature(checkout.razorpay_order_id, input.paymentId, input.signature)) {
+      return res.status(400).json({ error: 'Payment signature could not be verified' });
+    }
+
+    try {
+      const payment = await razorpayRequest(`/payments/${encodeURIComponent(input.paymentId)}`);
+      const result = await completeCheckout(checkout, payment);
+      if (result.state === 'refunded') {
+        return res.status(409).json({ error: 'The reservation expired, so this payment is being refunded.' });
+      }
+      if (result.state !== 'paid') return res.status(409).json({ error: 'This checkout is no longer available.' });
+      return res.json({ purchase: { id: result.purchaseId, totalAmount: checkout.unit_price }, vehicle: result.vehicle });
+    } catch (error) {
+      console.error('Could not verify checkout payment:', error.message);
+      return res.status(502).json({ error: 'Payment verification is still pending. Please do not pay again; refresh your showroom shortly.' });
+    }
+  });
+
+  app.post('/api/checkout/:id/cancel', requireAuth, async (req, res) => {
+    await releaseCheckout(req.params.id, req.user.id);
+    return res.status(204).end();
+  });
+
+  app.post('/api/payments/razorpay/webhook', async (req, res) => {
+    const signature = req.get('x-razorpay-signature');
+    if (!isValidSignature(req.body, process.env.RAZORPAY_WEBHOOK_SECRET, signature)) {
+      return res.status(400).json({ error: 'Invalid payment webhook signature' });
+    }
+    let event;
+    try {
+      event = JSON.parse(req.body.toString('utf8'));
+    } catch {
+      return res.status(400).json({ error: 'Invalid payment webhook body' });
+    }
+    const payment = event.payload?.payment?.entity;
+    if (event.event === 'payment.captured' && payment?.order_id) {
+      const checkout = await db.get('SELECT * FROM checkout_orders WHERE razorpay_order_id = ?', payment.order_id);
+      if (checkout) {
+        try {
+          const result = await completeCheckout(checkout, payment);
+          if (result.state === 'missing') return res.status(404).end();
+        } catch (error) {
+          console.error('Could not process captured payment webhook:', error.message);
+          return res.status(500).end();
+        }
+      }
+    } else if (event.event === 'payment.failed' && payment?.order_id) {
+      const checkout = await db.get('SELECT id, user_id FROM checkout_orders WHERE razorpay_order_id = ?', payment.order_id);
+      if (checkout) await releaseCheckout(checkout.id, checkout.user_id);
+    }
+    return res.status(200).json({ received: true });
+  });
+
+  app.post('/api/vehicles/:id/purchase', requireAuth, (_req, res) => (
+    res.status(410).json({ error: 'Direct purchases are disabled. Use the secure checkout flow.' })
+  ));
 
   app.post('/api/vehicles/:id/restock', requireAuth, requireAdmin, async (req, res) => {
     const input = validate(restockSchema, req.body, res);

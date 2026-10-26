@@ -4,12 +4,20 @@ const { DatabaseSync } = require('node:sqlite');
 
 const migrationDirectory = path.join(__dirname, 'migrations');
 const postgresMigration = path.join(__dirname, 'postgres-schema.sql');
+const postgresCheckoutMigration = path.join(__dirname, 'postgres-migrations', '002_checkout_orders.sql');
+const postgresAccountMigration = path.join(__dirname, 'postgres-migrations', '003_customer_accounts.sql');
+const postgresPurchaseLinkMigration = path.join(__dirname, 'postgres-migrations', '004_purchase_checkout_link.sql');
+const postgresRegistrationMigration = path.join(__dirname, 'postgres-migrations', '005_registration_verifications.sql');
 const migrations = [
   '001_initial_schema.sql',
   '002_purchase_records.sql',
   '003_vehicle_specifications.sql',
   '004_convert_usd_prices_to_inr.sql',
   '005_public_catalog_enquiries.sql',
+  '006_checkout_orders.sql',
+  '007_customer_accounts.sql',
+  '008_purchase_checkout_link.sql',
+  '009_registration_verifications.sql',
 ];
 
 function migrate(db) {
@@ -129,12 +137,30 @@ function createPostgresDatabase({ connectionString = process.env.DATABASE_URL, p
           )
         `);
         const { rows } = await client.query('SELECT MAX(version) AS version FROM app_schema_migrations');
-        if (Number(rows[0].version || 0) > 1) {
+        let currentVersion = Number(rows[0].version || 0);
+        if (currentVersion > 5) {
           throw new Error('PostgreSQL schema version is newer than this application supports');
         }
-        if (!rows[0].version) {
+        if (currentVersion === 0) {
           await client.query(fs.readFileSync(postgresMigration, 'utf8'));
           await client.query('INSERT INTO app_schema_migrations (version) VALUES (1)');
+          currentVersion = 1;
+        }
+        if (currentVersion < 2) {
+          await client.query(fs.readFileSync(postgresCheckoutMigration, 'utf8'));
+          await client.query('INSERT INTO app_schema_migrations (version) VALUES (2)');
+        }
+        if (currentVersion < 3) {
+          await client.query(fs.readFileSync(postgresAccountMigration, 'utf8'));
+          await client.query('INSERT INTO app_schema_migrations (version) VALUES (3)');
+        }
+        if (currentVersion < 4) {
+          await client.query(fs.readFileSync(postgresPurchaseLinkMigration, 'utf8'));
+          await client.query('INSERT INTO app_schema_migrations (version) VALUES (4)');
+        }
+        if (currentVersion < 5) {
+          await client.query(fs.readFileSync(postgresRegistrationMigration, 'utf8'));
+          await client.query('INSERT INTO app_schema_migrations (version) VALUES (5)');
         }
         await client.query('COMMIT');
       } catch (error) {

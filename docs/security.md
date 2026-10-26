@@ -19,6 +19,7 @@
 - Set a unique, random `JWT_SECRET` in the deployment environment; do not commit `.env`.
 - Serve production traffic through HTTPS. Configure `TRUST_PROXY_HOPS` only to the exact number of controlled proxies, not arbitrary client-provided forwarded headers.
 - Back up the selected database. SQLite is for one application instance; PostgreSQL supports shared database access, but the in-memory rate limiter is still not shared across replicas.
+- Keep `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET` on the API host. The browser receives only the Razorpay key ID; card and payment credentials are entered in the provider checkout and are not stored by this application.
 - Rotate the JWT secret deliberately: existing tokens become invalid.
 - Configure `AI_BASE_URL` only for a trusted HTTPS provider endpoint. Keep `AI_API_KEY` in the deployment secret store; never add it to frontend variables or source control.
 

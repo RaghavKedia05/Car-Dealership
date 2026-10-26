@@ -6,6 +6,7 @@ A responsive dealership website with a public storefront, customer showroom, and
 
 - Public landing page, featured vehicles, and guest enquiries.
 - Customer registration, sign-in, live inventory, AI Car Finder, and vehicle comparison.
+- Customer account dashboard with saved contact and delivery details, purchase history, and password recovery.
 - Admin dashboard, inventory management, and enquiry processing.
 - Role-checked API, input validation, password hashing, and persistent database storage.
 - Keyboard-accessible navigation and responsive desktop/mobile layouts.
@@ -22,6 +23,8 @@ npm.cmd run dev
 
 Open `http://localhost:5173`. Vite proxies API and health requests to Express on port 3001. The database is created at `data\dealership.db`; migrations run automatically. No demo inventory is seeded.
 
+Email verification is required to create customer accounts. Set `RESEND_API_KEY` and `PASSWORD_RESET_FROM` in the API environment using a verified sender domain before registering locally or in production. `APP_ORIGIN` is also required for password reset links.
+
 To create the first administrator, set credentials and run:
 
 ```powershell
@@ -32,7 +35,7 @@ npm.cmd run seed:admin
 
 ## Pages and API
 
-`/` is the public landing page; `/login` handles customer and admin sign-in. Customers land in `/showroom`; admins land in `/admin/dashboard` and can manage stock at `/admin/inventory`. `/contact` accepts public enquiries.
+`/` is the public landing page; `/login` is the single sign-in page for both customer and administrator accounts. The app routes accounts by their assigned role after sign-in: customers land in `/showroom`, admins land in `/admin/dashboard`. New customer accounts must verify their email with a one-time code before they can sign in. `/contact` accepts public enquiries.
 
 The API is served at `/api`; `/healthz` reports readiness. See [API documentation](docs/api.md) and [OpenAPI schema](docs/openapi.yaml) for endpoint details.
 
@@ -78,16 +81,28 @@ Vercel serves the Vite frontend. Run the Express API as a separate Node service 
    | `DATABASE_URL` | Neon pooled PostgreSQL connection string |
    | `DATABASE_POOL_MAX` | `5` (adjust to fit the database connection limit) |
    | `JWT_SECRET` | Unique random secret with at least 32 bytes |
+   | `TRUST_PROXY_HOPS` | `1` for Render's reverse proxy |
    | `AI_PROVIDER` | `deterministic` |
+   | `RAZORPAY_KEY_ID` | Razorpay API key ID (use Test Mode keys first) |
+   | `RAZORPAY_KEY_SECRET` | Matching Razorpay API key secret |
+   | `RAZORPAY_WEBHOOK_SECRET` | A strong secret you choose and also enter in the Razorpay webhook settings |
+   | `RESEND_API_KEY` | Resend API key for registration verification and account recovery emails |
+   | `PASSWORD_RESET_FROM` | Verified sender, for example `Apex Auto <accounts@your-domain.com>` |
+   | `APP_ORIGIN` | Exact HTTPS Vercel origin, for example `https://YOUR-PROJECT.vercel.app` |
 
    Let Render provide `PORT`. Generate a secret locally with `node -e "console.log(require('node:crypto').randomBytes(48).toString('hex'))"`. The API runs database migrations at startup. After deploying, verify `https://YOUR-API.onrender.com/healthz` responds successfully and note the API origin.
 5. In Vercel, import the same GitHub repository. Use the repository root, select the **Vite** framework preset, set the build command to `npm run build`, the output directory to `dist`, and the install command to `npm ci`. Use Node.js 22.x.
 6. In Vercel project environment variables, set `VITE_API_BASE_URL` to the API's HTTPS origin, for example `https://YOUR-API.onrender.com` (do not append `/api`). Enable it for Production and any Preview environment you intend to use, then deploy.
 7. Copy the Vercel production origin, such as `https://YOUR-PROJECT.vercel.app`, into Render's `CORS_ORIGINS`. It must be an exact origin with no path or trailing slash. Separate multiple origins with commas. Save and redeploy the API.
-8. To create the first administrator without a shell, add `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and optionally `ADMIN_NAME` to the Render service's Environment settings. Use an email that has not already registered; if it exists, the API promotes it and keeps its current password. The API creates or promotes the account when it starts. Redeploy the API, confirm the account can sign in at `/login`, then remove `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `ADMIN_NAME` from Render and redeploy again. The `npm run seed:admin` command remains available for local use.
-9. Verify the production site by refreshing `/login`, registering and signing in as a customer, signing in as the administrator, adding a vehicle, and submitting a contact enquiry.
+8. In the Razorpay Dashboard, start in Test Mode and enable automatic payment capture. Add a webhook pointing to `https://YOUR-API.onrender.com/api/payments/razorpay/webhook`, subscribe to `payment.captured` and `payment.failed`, and set the same webhook secret as `RAZORPAY_WEBHOOK_SECRET` in Render. Use test keys to complete a test checkout before switching to live keys.
+9. To create the first administrator without a shell, add `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and optionally `ADMIN_NAME` to the Render service's Environment settings. Use an email that has not already registered; if it exists, the API promotes it and keeps its current password. The API creates or promotes the account when it starts. Redeploy the API, confirm the account can sign in at `/login`, then remove `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `ADMIN_NAME` from Render and redeploy again. The `npm run seed:admin` command remains available for local use.
+10. Verify the production site by refreshing `/login`, registering a customer and confirming the emailed code is required before sign-in, completing a test payment, confirming stock changes only after capture, signing in to the same page with the administrator account, adding a vehicle, and submitting a contact enquiry.
+
+Before customer registration verification or password recovery can send email, verify a sending domain in Resend and set the email variables on the **Render API service**. `PASSWORD_RESET_FROM` must use a sender on that verified domain, and `APP_ORIGIN` must be the exact Vercel production origin (scheme and hostname only) for password reset links. Save and redeploy Render after setting them. Registration codes expire after 10 minutes and can be resent after one minute. Password reset links expire after 30 minutes and can only be used once. Signed-in customers can update their name, phone, and delivery address, review paid and pending orders, and change their password from `/account`.
 
 `VITE_API_BASE_URL` is embedded into the frontend at build time, so redeploy Vercel after changing it. `DATABASE_URL`, `JWT_SECRET`, and other secrets belong only on the API host; never expose them through `VITE_` variables. Vercel preview deployments use different origins, so add their exact origins to `CORS_ORIGINS` only if those previews need API access.
+
+Checkout uses Razorpay Standard Checkout. The API creates each order using the current server-side price, reserves one unit for 15 minutes, verifies the payment signature and captured amount, and records the purchase only after confirmation. Failed, dismissed, or expired reservations release stock. Keep Razorpay credentials server-side; the key secret and webhook secret must never be added to Vercel or frontend variables.
 
 ### Run locally or deploy as one service
 

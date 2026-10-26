@@ -151,7 +151,6 @@ function App() {
   }));
   const { pathname, search } = location;
   const [authMode, setAuthMode] = useState('login');
-  const [authRole, setAuthRole] = useState('user');
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState(null);
@@ -169,9 +168,25 @@ function App() {
   const [pagination, setPagination] = useState({ page: 1, pageSize: 9, total: 0, totalPages: 0 });
   const [refreshKey, setRefreshKey] = useState(0);
   const [editor, setEditor] = useState(null);
+  const [checkoutVehicle, setCheckoutVehicle] = useState(null);
+  const checkoutResolver = useRef(null);
   const [mobileFilters, setMobileFilters] = useState(false);
   const [apiStatus, setApiStatus] = useState({ state: 'checking', latency: null });
   const isAdmin = session?.user.role === 'admin';
+
+  function handleAccountUpdated(user) {
+    if (!session) return;
+    const currentUser = session.user;
+    if (['name', 'email', 'phone', 'deliveryAddress', 'role'].every((key) => currentUser[key] === user[key])) return;
+    localStorage.setItem('northline-user', JSON.stringify(user));
+    setSession({ ...session, user });
+  }
+
+  function handlePasswordChanged(nextSession) {
+    localStorage.setItem('northline-token', nextSession.token);
+    localStorage.setItem('northline-user', JSON.stringify(nextSession.user));
+    setSession(nextSession);
+  }
 
   useEffect(() => {
     function handleAppError(event) {
@@ -278,6 +293,14 @@ function App() {
       navigate('/login');
       return;
     }
+    if (pathname === '/account' && !session) {
+      navigate('/login');
+      return;
+    }
+    if (pathname === '/account' && isAdmin) {
+      navigate('/admin/dashboard');
+      return;
+    }
     if ((['/vehicles', '/showroom'].includes(pathname) || vehicleDetailRoute) && isAdmin) {
       navigate('/admin/dashboard');
       return;
@@ -372,23 +395,28 @@ function App() {
     navigate('/');
   }, [session, navigate]);
 
-  async function handlePurchase(vehicle) {
+  function handlePurchase(vehicle) {
     setBusyId(vehicle.id);
     setError('');
     setNotice('');
-    try {
-      const result = await api(`/api/vehicles/${vehicle.id}/purchase`, { method: 'POST' });
-      setVehicles((current) => current.map((item) => item.id === vehicle.id ? result.vehicle : item));
-      setRefreshKey((current) => current + 1);
-      setNotice(`${vehicle.make} ${vehicle.model} purchased. Inventory has been updated.`);
-      return result.vehicle;
-    } catch (requestError) {
-      setError(requestError.message);
-      if (requestError.status === 401) signOut();
-      return null;
-    } finally {
-      setBusyId(null);
+    setCheckoutVehicle(vehicle);
+    return new Promise((resolve) => {
+      checkoutResolver.current = resolve;
+    });
+  }
+
+  function handleCheckoutComplete(result, failure) {
+    if (result?.vehicle) {
+      setVehicles((current) => current.map((item) => item.id === result.vehicle.id ? result.vehicle : item));
+      const reference = result.purchase?.id ? ` Order reference: ${result.purchase.id.slice(0, 8).toUpperCase()}.` : '';
+      setNotice(`Payment confirmed. ${result.vehicle.make} ${result.vehicle.model} is reserved for you.${reference}`);
     }
+    if (failure) setNotice(failure);
+    setRefreshKey((current) => current + 1);
+    setCheckoutVehicle(null);
+    setBusyId(null);
+    checkoutResolver.current?.(result?.vehicle || null);
+    checkoutResolver.current = null;
   }
 
   async function saveVehicle(event) {
@@ -467,7 +495,7 @@ function App() {
 
   const hasFilters = make || model || category || minPrice || maxPrice;
   const vehicleRoute = pathname.match(/^\/vehicles\/([0-9a-f-]+)$/i);
-  const customerRoute = pathname === '/showroom' || pathname === '/vehicles' || Boolean(vehicleRoute);
+  const customerRoute = pathname === '/showroom' || pathname === '/account' || pathname === '/vehicles' || Boolean(vehicleRoute);
   const adminRoute = pathname === '/admin/dashboard' || pathname === '/admin/inventory';
   const awaitingRoleRedirect = (customerRoute && (!session || isAdmin))
     || (adminRoute && (!session || !isAdmin))
@@ -477,7 +505,8 @@ function App() {
     return <div className="public-app"><main className="public-main route-transition" role="status">Opening your secure dealership view…</main></div>;
   }
 
-  if (pathname === '/' || pathname === '/login' || pathname === '/contact' || vehicleRoute
+  if (pathname === '/' || pathname === '/login' || pathname === '/contact' || pathname === '/account'
+    || pathname === '/forgot-password' || pathname === '/reset-password' || vehicleRoute
     || pathname === '/admin/dashboard') {
     let pageContent;
     if (pathname === '/') {
@@ -488,9 +517,9 @@ function App() {
           <div className="stitch-auth-intro">
             <p className="eyebrow"><span className="eyebrow-line" /> APEX AUTO · PRECISION, IN FOCUS</p>
             <h1>Every great drive<br />starts with <span>the right key.</span></h1>
-            <p>Sign in to explore your showroom. Dealership administrators can use the same secure gateway to reach operations.</p>
+            <p>Sign in to explore our current collection, check availability, and find the right car for you.</p>
             <ul className="stitch-auth-benefits">
-              <li><ShieldCheck size={17} /> Secure, role-based access</li>
+              <li><ShieldCheck size={17} /> Secure account access</li>
               <li><Database size={17} /> Live inventory from the dealership</li>
               <li><Sparkles size={17} /> A smarter way to find your next car</li>
             </ul>
@@ -498,8 +527,7 @@ function App() {
           <AuthForm
             mode={authMode}
             setMode={setAuthMode}
-            role={authRole}
-            setRole={setAuthRole}
+            navigate={navigate}
             onAuthenticated={saveSession}
             setError={setError}
             error={error}
@@ -508,6 +536,20 @@ function App() {
           />
         </section>
       );
+    } else if (pathname === '/account') {
+      pageContent = (
+        <CustomerDashboard
+          api={api}
+          user={session.user}
+          onUserUpdated={handleAccountUpdated}
+          onPasswordChanged={handlePasswordChanged}
+          navigate={navigate}
+        />
+      );
+    } else if (pathname === '/forgot-password') {
+      pageContent = <PasswordRecovery api={api} navigate={navigate} email={new URLSearchParams(search).get('email') || ''} />;
+    } else if (pathname === '/reset-password') {
+      pageContent = <PasswordReset api={api} navigate={navigate} token={new URLSearchParams(search).get('token') || ''} />;
     } else if (pathname === '/contact') {
       pageContent = <ContactPage api={api} vehicleId={new URLSearchParams(search).get('vehicle')} session={session} />;
     } else if (vehicleRoute) {
@@ -547,7 +589,6 @@ function App() {
                 navigate(session ? (isAdmin ? '/admin/inventory' : '/showroom') : '/login');
               }}>Showroom</a>
               <a href="/contact" onClick={(event) => { event.preventDefault(); navigate('/contact'); }}>Concierge</a>
-              <a href="/login" onClick={(event) => { event.preventDefault(); navigate('/login'); }}>Dealership admin</a>
             </nav>
             <span>© {new Date().getFullYear()} Apex Auto. All rights reserved.</span>
           </footer>
@@ -597,6 +638,7 @@ function App() {
               <a href="#ai-finder"><Sparkles size={15} /> Finder</a>
               <a href="#inventory"><CarFront size={15} /> Inventory</a>
               <a href="/contact" onClick={(event) => { event.preventDefault(); navigate('/contact'); }}>Contact</a>
+              <a href="/account" onClick={(event) => { event.preventDefault(); navigate('/account'); }}>My account</a>
             </>
           )}
         </nav>
@@ -788,7 +830,7 @@ function App() {
                   </div>
                 </nav>
               )}
-              <p className="inventory-note"><LockKeyhole size={13} /> Stock updates as purchases are made · Live inventory</p>
+              <p className="inventory-note"><LockKeyhole size={13} /> Availability reflects active reservations and confirmed purchases</p>
             </>
           ) : (
             <div className="account-section" id="account">
@@ -806,6 +848,7 @@ function App() {
               <AuthForm
                 mode={authMode}
                 setMode={setAuthMode}
+                navigate={navigate}
                 onAuthenticated={saveSession}
                 setError={setError}
                 error={error}
@@ -818,6 +861,7 @@ function App() {
 
       </main>
 
+      {checkoutVehicle && <VehicleCheckout vehicle={checkoutVehicle} user={session.user} api={api} onComplete={handleCheckoutComplete} />}
       <GlobalErrorToast notification={toastError} onDismiss={() => setToastError(null)} />
       <footer className="apex-footer">
         <span>VEHICLE DETAILS ARE SHOWN AS RECORDED IN THE CURRENT CATALOGUE.</span>
@@ -836,6 +880,7 @@ function App() {
             <a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}><CarFront size={18} /><span>Home</span></a>
             <a href="#ai-finder"><Sparkles size={18} /><span>Finder</span></a>
             <a href="#inventory"><CarFront size={18} /><span>Inventory</span></a>
+            <a href="/account" onClick={(event) => { event.preventDefault(); navigate('/account'); }}><UserRound size={18} /><span>Account</span></a>
           </>
         )}
         {session ? (
@@ -873,6 +918,7 @@ function PublicHeader({ session, isAdmin, signOut, navigate, pathname }) {
         ) : pathname === '/' ? (
           <>
             <a href="/showroom" onClick={(event) => follow(event, session ? '/showroom' : '/login')}>Showroom</a>
+            {session && <a href="/account" onClick={(event) => follow(event, '/account')}>My account</a>}
             <a href="#featured-allocations">Inventory</a>
             <a href="#services">Services</a>
             <a href="#about">About</a>
@@ -881,6 +927,7 @@ function PublicHeader({ session, isAdmin, signOut, navigate, pathname }) {
           <>
             <a href="/#top" onClick={(event) => follow(event, '/')}>Home</a>
             <a href="/showroom" onClick={(event) => follow(event, session ? '/showroom' : '/login')}>Showroom</a>
+            {session && !isAdmin && <a href="/account" onClick={(event) => follow(event, '/account')}>My account</a>}
             <a href="/#about" onClick={(event) => follow(event, '/#about')}>About</a>
             <a href="/contact" onClick={(event) => follow(event, '/contact')}>Contact</a>
           </>
@@ -894,7 +941,6 @@ function PublicHeader({ session, isAdmin, signOut, navigate, pathname }) {
           </>
         ) : (
           <>
-            <a className="public-admin-login" href="/login" onClick={(event) => follow(event, '/login')}>ADMIN</a>
             <a className="public-signin" href="/login" onClick={(event) => follow(event, '/login')}>SIGN IN <ArrowUpRight size={15} /></a>
           </>
         )}
@@ -1883,6 +1929,390 @@ function VehicleCard({ vehicle, index, isAdmin, busy, onPurchase, onEdit, onDele
   );
 }
 
+function loadRazorpayCheckout() {
+  if (window.Razorpay) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-razorpay-checkout]');
+    if (existing) {
+      if (existing.dataset.loaded === 'true') {
+        reject(new Error('Secure payment checkout could not be initialized.'));
+        return;
+      }
+      existing.addEventListener('load', resolve, { once: true });
+      existing.addEventListener('error', reject, { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.dataset.razorpayCheckout = 'true';
+    script.onload = () => { script.dataset.loaded = 'true'; resolve(); };
+    script.onerror = () => reject(new Error('Secure payment checkout could not be loaded.'));
+    document.body.appendChild(script);
+  });
+}
+
+function VehicleCheckout({ vehicle, user, api, onComplete }) {
+  const [customerName, setCustomerName] = useState(user.name || '');
+  const [email, setEmail] = useState(user.email || '');
+  const [phone, setPhone] = useState(user.phone || '');
+  const [deliveryAddress, setDeliveryAddress] = useState(user.deliveryAddress || '');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [paymentResponse, setPaymentResponse] = useState(null);
+  const dialogRef = useRef(null);
+  const checkoutIdRef = useRef(null);
+  const paymentHandledRef = useRef(false);
+  const completingRef = useRef(false);
+  useDialogAccessibility(dialogRef, () => cancelCheckout('Checkout closed.'), true);
+
+  async function cancelCheckout(reason) {
+    if (completingRef.current) return;
+    completingRef.current = true;
+    const checkoutId = checkoutIdRef.current;
+    if (checkoutId && !paymentHandledRef.current) {
+      checkoutIdRef.current = null;
+      await api(`/api/checkout/${checkoutId}/cancel`, { method: 'POST' }).catch(() => {});
+    }
+    onComplete(null, reason);
+  }
+
+  async function verifyPayment(response) {
+    if (!checkoutIdRef.current) return;
+    setLoading(true);
+    setError('');
+    try {
+      const result = await api(`/api/checkout/${checkoutIdRef.current}/verify`, {
+        method: 'POST',
+        body: JSON.stringify({ paymentId: response.razorpay_payment_id, signature: response.razorpay_signature }),
+      });
+      checkoutIdRef.current = null;
+      completingRef.current = true;
+      onComplete(result);
+    } catch (requestError) {
+      setPaymentResponse(response);
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function startPayment(event) {
+    event.preventDefault();
+    paymentHandledRef.current = false;
+    completingRef.current = false;
+    setPaymentResponse(null);
+    setLoading(true);
+    setError('');
+    try {
+      const order = await api(`/api/vehicles/${vehicle.id}/checkout`, {
+        method: 'POST',
+        body: JSON.stringify({ customerName, email, phone, deliveryAddress }),
+      });
+      checkoutIdRef.current = order.checkoutId;
+      paymentHandledRef.current = false;
+      await loadRazorpayCheckout();
+      const checkout = new window.Razorpay({
+        key: order.keyId,
+        amount: order.amount,
+        currency: order.currency,
+        name: 'Apex Auto',
+        description: `${vehicle.make} ${vehicle.model}`,
+        order_id: order.orderId,
+        prefill: order.customer,
+        notes: { checkout_id: order.checkoutId },
+        theme: { color: '#347edc' },
+        modal: {
+          ondismiss: () => {
+            if (!paymentHandledRef.current) cancelCheckout('Payment was cancelled. Your reservation has been released.');
+          },
+        },
+        handler: (response) => {
+          paymentHandledRef.current = true;
+          verifyPayment(response);
+        },
+      });
+      checkout.on('payment.failed', (failure) => {
+        const message = failure.error?.description || 'Payment was not completed. Please try again.';
+        setError(message);
+        const checkoutId = checkoutIdRef.current;
+        checkoutIdRef.current = null;
+        paymentHandledRef.current = false;
+        if (checkoutId) api(`/api/checkout/${checkoutId}/cancel`, { method: 'POST' }).catch(() => {});
+      });
+      checkout.open();
+    } catch (requestError) {
+      const checkoutId = checkoutIdRef.current;
+      checkoutIdRef.current = null;
+      if (checkoutId) await api(`/api/checkout/${checkoutId}/cancel`, { method: 'POST' }).catch(() => {});
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="checkout-backdrop">
+      <form className="checkout-dialog" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="checkout-title" onSubmit={paymentResponse ? (event) => { event.preventDefault(); verifyPayment(paymentResponse); } : startPayment}>
+        <div className="checkout-heading">
+          <div><p className="eyebrow"><span className="eyebrow-line" /> SECURE VEHICLE CHECKOUT</p><h2 id="checkout-title">Your details <span>and payment.</span></h2></div>
+          <button className="icon-button" type="button" aria-label="Close checkout" onClick={() => cancelCheckout('Checkout closed.')}> <X size={18} /></button>
+        </div>
+        <div className="checkout-vehicle-summary">
+          <div><span>VEHICLE</span><strong>{vehicle.make} {vehicle.model}</strong></div>
+          <div><span>TOTAL DUE</span><strong>{money(vehicle.price)}</strong></div>
+        </div>
+        <p className="checkout-step-label">01 <span>Buyer and delivery details</span></p>
+        <div className="checkout-fields">
+          <label className="form-label">FULL NAME<input required minLength="2" maxLength="80" autoComplete="name" value={customerName} onChange={(event) => setCustomerName(event.target.value)} /></label>
+          <label className="form-label">EMAIL ADDRESS<input required type="email" maxLength="254" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+          <label className="form-label">PHONE NUMBER<input required type="tel" minLength="7" maxLength="20" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Include country code" /></label>
+          <label className="form-label checkout-address">DELIVERY ADDRESS<textarea required minLength="8" maxLength="500" autoComplete="street-address" rows="3" value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} /></label>
+        </div>
+        <div className="checkout-payment-note"><LockKeyhole size={16} /><span>02 <strong>Secure payment</strong><small>Choose an available payment method in Razorpay Checkout. Card details are entered with the payment provider.</small></span></div>
+        {error && <div className="form-error" role="alert"><CircleHelp size={16} /> {error}</div>}
+        <button className="checkout-pay-button" type="submit" disabled={loading}>
+          {loading ? 'Confirming…' : paymentResponse ? 'Retry payment confirmation' : `Continue to payment · ${money(vehicle.price)}`}
+          <ArrowUpRight size={16} />
+        </button>
+        <p className="checkout-disclaimer">Your vehicle is reserved for 15 minutes while you complete payment. Do not close this page until payment is confirmed.</p>
+      </form>
+    </div>
+  );
+}
+
+function CustomerDashboard({ api, user, onUserUpdated, onPasswordChanged, navigate }) {
+  const [tab, setTab] = useState('overview');
+  const [profile, setProfile] = useState(user);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    Promise.all([api('/api/account'), api('/api/account/orders')])
+      .then(([account, history]) => {
+        if (!active) return;
+        setProfile(account.user);
+        setOrders(history.orders);
+        onUserUpdated(account.user);
+      })
+      .catch((requestError) => { if (active) setError(requestError.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [api]);
+
+  async function saveProfile(event) {
+    event.preventDefault();
+    setSavingProfile(true);
+    setError('');
+    setNotice('');
+    try {
+      const result = await api('/api/account', {
+        method: 'PUT',
+        body: JSON.stringify({ name: profile.name, phone: profile.phone || '', deliveryAddress: profile.deliveryAddress || '' }),
+      });
+      setProfile(result.user);
+      onUserUpdated(result.user);
+      setNotice('Your contact details have been saved.');
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  async function changePassword(event) {
+    event.preventDefault();
+    setError('');
+    setNotice('');
+    if (newPassword !== confirmPassword) {
+      setError('The new passwords do not match.');
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      const result = await api('/api/account/password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      onPasswordChanged(result);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setNotice('Password changed. Other signed-in sessions were signed out.');
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSavingPassword(false);
+    }
+  }
+
+  const completedOrders = orders.filter((order) => order.status === 'paid');
+  const openOrders = orders.filter((order) => ['pending', 'refunding', 'refunded'].includes(order.status));
+
+  return (
+    <section className="customer-dashboard" aria-labelledby="customer-dashboard-title">
+      <div className="customer-dashboard-heading">
+        <div>
+          <p className="eyebrow"><span className="eyebrow-line" /> YOUR APEX AUTO ACCOUNT</p>
+          <h1 id="customer-dashboard-title">Welcome back, <span>{profile.name?.split(' ')[0] || 'driver'}.</span></h1>
+          <p>Keep your vehicle orders and contact details together in one place.</p>
+        </div>
+        <button className="public-button" type="button" onClick={() => navigate('/showroom')}>Browse the showroom <ArrowUpRight size={15} /></button>
+      </div>
+
+      <nav className="customer-account-tabs" aria-label="Account sections">
+        {[
+          ['overview', 'Overview'], ['orders', 'My orders'], ['profile', 'Contact details'], ['security', 'Security'],
+        ].map(([value, label]) => (
+          <button key={value} type="button" className={tab === value ? 'active' : ''} aria-current={tab === value ? 'page' : undefined} onClick={() => { setTab(value); setError(''); setNotice(''); }}>{label}</button>
+        ))}
+      </nav>
+
+      {error && <div className="customer-account-alert" role="alert">{error}</div>}
+      {notice && <div className="customer-account-success" role="status"><Check size={16} /> {notice}</div>}
+      {loading ? <div className="customer-account-loading"><span className="loading-spinner" /> Loading your account…</div> : (
+        <>
+          {tab === 'overview' && (
+            <div className="customer-account-overview">
+              <div className="customer-account-metrics">
+                <article><span>COMPLETED PURCHASES</span><strong>{completedOrders.length}</strong><small>Verified and recorded</small></article>
+                <article><span>OPEN CHECKOUTS</span><strong>{openOrders.filter((order) => order.status === 'pending').length}</strong><small>Reservations expire after 15 minutes</small></article>
+                <article><span>CONTACT DETAILS</span><strong>{profile.phone ? 'Ready' : 'Add phone'}</strong><small>{profile.deliveryAddress ? 'Delivery address saved' : 'Save an address for checkout'}</small></article>
+              </div>
+              <div className="customer-account-panels">
+                <section className="customer-account-panel">
+                  <div className="customer-account-panel-heading"><div><p className="eyebrow">RECENT ACTIVITY</p><h2>Your latest <span>orders.</span></h2></div><button type="button" onClick={() => setTab('orders')}>View all <ArrowUpRight size={14} /></button></div>
+                  {orders.length ? orders.slice(0, 3).map((order) => <CustomerOrderRow key={order.id} order={order} compact />) : <p className="customer-account-empty">No vehicle orders yet. Your confirmed purchases will appear here.</p>}
+                </section>
+                <section className="customer-account-panel customer-account-contact-card">
+                  <p className="eyebrow">YOUR CONTACT CARD</p><h2>{profile.name}</h2><p>{profile.email}</p><p>{profile.phone || 'Phone number not added'}</p><p>{profile.deliveryAddress || 'Delivery address not added'}</p><button type="button" onClick={() => setTab('profile')}>Update details <ArrowUpRight size={14} /></button>
+                </section>
+              </div>
+            </div>
+          )}
+
+          {tab === 'orders' && (
+            <section className="customer-account-panel customer-orders-panel">
+              <div className="customer-account-panel-heading"><div><p className="eyebrow">ORDER HISTORY</p><h2>Vehicles you’ve <span>reserved.</span></h2></div><span>{orders.length} {orders.length === 1 ? 'order' : 'orders'}</span></div>
+              {orders.length ? orders.map((order) => <CustomerOrderRow key={order.id} order={order} />) : <p className="customer-account-empty">There are no orders on this account yet. When you purchase a vehicle, its payment and delivery details will appear here.</p>}
+            </section>
+          )}
+
+          {tab === 'profile' && (
+            <form className="customer-account-panel customer-profile-form" onSubmit={saveProfile}>
+              <div className="customer-account-panel-heading"><div><p className="eyebrow">BUYER INFORMATION</p><h2>Contact <span>details.</span></h2></div></div>
+              <p className="customer-account-help">These details make vehicle enquiries and checkout faster. Your email is your sign-in address.</p>
+              <div className="customer-profile-grid">
+                <label>Full name<input required minLength="2" maxLength="80" autoComplete="name" value={profile.name || ''} onChange={(event) => setProfile((current) => ({ ...current, name: event.target.value }))} /></label>
+                <label>Email address<input value={profile.email || ''} readOnly disabled /></label>
+                <label>Phone number<input type="tel" maxLength="20" autoComplete="tel" placeholder="Include country code" value={profile.phone || ''} onChange={(event) => setProfile((current) => ({ ...current, phone: event.target.value }))} /></label>
+                <label className="customer-profile-address">Delivery address<textarea rows="4" maxLength="500" autoComplete="street-address" placeholder="Flat or house, street, city, state and PIN code" value={profile.deliveryAddress || ''} onChange={(event) => setProfile((current) => ({ ...current, deliveryAddress: event.target.value }))} /></label>
+              </div>
+              <button className="public-button" type="submit" disabled={savingProfile}>{savingProfile ? 'Saving…' : 'Save contact details'} <Check size={15} /></button>
+            </form>
+          )}
+
+          {tab === 'security' && (
+            <div className="customer-account-panel customer-security-panel">
+              <p className="eyebrow">ACCOUNT SECURITY</p><h2>Keep your account <span>safe.</span></h2>
+              <p className="customer-account-help">Change your password here. If you can’t sign in, request a time-limited reset link by email.</p>
+              <form className="customer-password-form" onSubmit={changePassword}>
+                <label>Current password<input required type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>
+                <label>New password<input required type="password" minLength="12" maxLength="72" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="At least 12 characters" /></label>
+                <label>Confirm new password<input required type="password" minLength="12" maxLength="72" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
+                <button className="public-button" type="submit" disabled={savingPassword}>{savingPassword ? 'Updating…' : 'Change password'} <LockKeyhole size={15} /></button>
+              </form>
+              <div className="customer-recovery-link"><span>Forgot your current password?</span><button type="button" onClick={() => navigate(`/forgot-password?email=${encodeURIComponent(profile.email || '')}`)}>Email me a reset link</button></div>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function CustomerOrderRow({ order, compact = false }) {
+  const statusLabels = { paid: 'Payment confirmed', pending: 'Reserved · payment pending', refunding: 'Refund processing', refunded: 'Refunded', expired: 'Reservation expired' };
+  return (
+    <article className={`customer-order-row ${compact ? 'compact' : ''}`}>
+      <div className="customer-order-vehicle">
+        {order.vehicle.imageUrl ? <img src={order.vehicle.imageUrl} alt="" loading="lazy" /> : <span className="customer-order-placeholder"><CarFront size={22} /></span>}
+        <div><strong>{order.vehicle.year ? `${order.vehicle.year} ` : ''}{order.vehicle.make} {order.vehicle.model}</strong><small>Order {order.id.slice(0, 8).toUpperCase()} · {new Date(order.createdAt).toLocaleDateString()}</small></div>
+      </div>
+      <div className="customer-order-details">
+        <span className={`customer-order-status status-${order.status}`}>{statusLabels[order.status] || order.status}</span>
+        <strong>{money(order.totalAmount)}</strong>
+        {!compact && <><small>{order.phone} · {order.email}</small><small>{order.deliveryAddress}</small>{order.paymentId && <small>Payment reference: {order.paymentId}</small>}</>}
+      </div>
+    </article>
+  );
+}
+
+function PasswordRecovery({ api, navigate, email: initialEmail = '' }) {
+  const [email, setEmail] = useState(initialEmail);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const result = await api('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
+      setNotice(result.message);
+    } catch (requestError) { setError(requestError.message); }
+    finally { setBusy(false); }
+  }
+  return (
+    <section className="account-recovery-card">
+      <p className="eyebrow"><span className="eyebrow-line" /> ACCOUNT RECOVERY</p><h1>Reset your <span>password.</span></h1>
+      <p>Enter the email address on your account. If it matches an account and recovery email is configured, we’ll send a link that expires in 30 minutes.</p>
+      {error && <div className="form-error" role="alert">{error}</div>}{notice && <div className="form-success" role="status"><Check size={15} /> {notice}</div>}
+      <form onSubmit={submit}><label className="form-label">EMAIL ADDRESS<input required type="email" maxLength="254" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label><button className="auth-submit" type="submit" disabled={busy}>{busy ? 'Sending…' : 'Send reset link'} <ArrowUpRight size={16} /></button></form>
+      <button className="account-recovery-back" type="button" onClick={() => navigate('/login')}>Back to sign in</button>
+    </section>
+  );
+}
+
+function PasswordReset({ api, navigate, token }) {
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(token ? '' : 'This reset link is missing its token. Request a new one.');
+  const [notice, setNotice] = useState('');
+  async function submit(event) {
+    event.preventDefault();
+    setError('');
+    if (password !== confirmPassword) { setError('The passwords do not match.'); return; }
+    setBusy(true);
+    try {
+      const result = await api('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) });
+      setNotice(result.message);
+      setPassword('');
+      setConfirmPassword('');
+    } catch (requestError) { setError(requestError.message); }
+    finally { setBusy(false); }
+  }
+  return (
+    <section className="account-recovery-card">
+      <p className="eyebrow"><span className="eyebrow-line" /> ACCOUNT RECOVERY</p><h1>Choose a new <span>password.</span></h1>
+      <p>Use at least 12 characters. This link can only be used once.</p>
+      {error && <div className="form-error" role="alert">{error}</div>}{notice && <div className="form-success" role="status"><Check size={15} /> {notice}</div>}
+      {!notice && <form onSubmit={submit}><label className="form-label">NEW PASSWORD<input required type="password" minLength="12" maxLength="72" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label><label className="form-label">CONFIRM PASSWORD<input required type="password" minLength="12" maxLength="72" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label><button className="auth-submit" type="submit" disabled={busy || !token}>{busy ? 'Updating…' : 'Update password'} <LockKeyhole size={16} /></button></form>}
+      <button className="account-recovery-back" type="button" onClick={() => navigate('/login')}>Back to sign in</button>
+    </section>
+  );
+}
+
 function GlobalErrorToast({ notification, onDismiss }) {
   if (!notification) return null;
   return (
@@ -1894,10 +2324,12 @@ function GlobalErrorToast({ notification, onDismiss }) {
   );
 }
 
-function AuthForm({ mode, setMode, role, setRole, onAuthenticated, setError, error, notice, setNotice }) {
+function AuthForm({ mode, setMode, navigate, onAuthenticated, setError, error, notice, setNotice }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
+  const [verificationPending, setVerificationPending] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const registering = mode === 'register';
 
@@ -1906,17 +2338,25 @@ function AuthForm({ mode, setMode, role, setRole, onAuthenticated, setError, err
     setSubmitting(true);
     setError('');
     try {
-      const response = await fetch(apiUrl(`/api/auth/${registering ? 'register' : 'login'}`), {
+      const verifying = registering && verificationPending;
+      const endpoint = verifying ? '/api/auth/register/verify' : `/api/auth/${registering ? 'register' : 'login'}`;
+      const payload = verifying
+        ? { email, code: otp }
+        : { ...(registering ? { name } : {}), email, password };
+      const response = await fetch(apiUrl(endpoint), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...(registering ? { name } : {}), email, password }),
+        body: JSON.stringify(payload),
       });
       const body = await parseApiResponse(response, 'We could not sign you in. Please try again.');
-      if (registering) {
-        setMode('login');
-        setPassword('');
-        setError('');
-        setNotice('Your account is ready. Sign in to continue.');
+      if (registering && !verifying) {
+        setVerificationPending(true);
+        setOtp('');
+        setNotice(body.message || 'A verification code was sent to your email.');
+        return;
+      }
+      if (verifying) {
+        onAuthenticated({ token: body.token, user: body.user });
         return;
       }
       onAuthenticated({ token: body.token, user: body.user });
@@ -1928,52 +2368,57 @@ function AuthForm({ mode, setMode, role, setRole, onAuthenticated, setError, err
     }
   }
 
+  async function resendCode() {
+    setSubmitting(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch(apiUrl('/api/auth/register'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password }),
+      });
+      const body = await parseApiResponse(response, 'We could not send a new verification code. Please try again.');
+      setNotice(body.message || 'A new verification code was sent.');
+    } catch (requestError) {
+      reportError(requestError);
+      setError(requestError.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <form className="auth-form stitch-auth-card" onSubmit={submit}>
-      <div className="stitch-role-switch" aria-label="Sign-in destination">
-        <button
-          type="button"
-          aria-pressed={role === 'user'}
-          className={role === 'user' ? 'selected' : ''}
-          onClick={() => setRole('user')}
-        >
-          Customer access
-        </button>
-        <button
-          type="button"
-          aria-pressed={role === 'admin'}
-          className={role === 'admin' ? 'selected' : ''}
-          onClick={() => { setRole('admin'); setMode('login'); setError(''); setNotice(''); }}
-        >
-          Admin access
-        </button>
-      </div>
       <div className="form-topline"><span>YOUR SHOWROOM, AWAITING</span><span>01 / 02</span></div>
-      <h3>{registering ? 'Make yourself at home.' : role === 'admin' ? 'Welcome to operations.' : 'Welcome back.'}</h3>
+      <h3>{registering ? verificationPending ? 'Verify your email.' : 'Make yourself at home.' : 'Welcome back.'}</h3>
       <p>{registering
-        ? 'Create your customer account to explore the live showroom.'
-        : role === 'admin'
-          ? 'Sign in with your administrator account to manage dealership operations.'
-          : 'Sign in to explore your live showroom and find your next drive.'}</p>
+        ? verificationPending
+          ? `Enter the six-digit code sent to ${email}. It expires in 10 minutes.`
+          : 'Create an account to explore the live showroom.'
+        : 'Sign in with your account. Your access opens automatically.'}</p>
       {notice && <div className="form-success" role="status"><Check size={15} /> {notice}</div>}
       {error && <div className="form-error" role="alert"><CircleHelp size={16} /> {error}</div>}
-      {registering && <label className="form-label">YOUR NAME<input required minLength="2" maxLength="80" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Alex Morgan" /></label>}
-      <label className="form-label">EMAIL ADDRESS<input required type="email" maxLength="254" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>
-      <label className="form-label">PASSWORD<input required type="password" minLength={registering ? 12 : 1} maxLength="72" autoComplete={registering ? 'new-password' : 'current-password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={registering ? 'At least 12 characters' : 'Your password'} /></label>
-      {!registering && <p className="stitch-role-note">You’ll be routed according to the role assigned to your account.</p>}
+      {registering && !verificationPending && <label className="form-label">YOUR NAME<input required minLength="2" maxLength="80" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Alex Morgan" /></label>}
+      {(!registering || !verificationPending) && <label className="form-label">EMAIL ADDRESS<input required type="email" maxLength="254" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>}
+      {registering && verificationPending && <label className="form-label">EMAIL VERIFICATION CODE<input required type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength="6" maxLength="6" value={otp} onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" /></label>}
+      {(!registering || !verificationPending) && <label className="form-label">PASSWORD<input required type="password" minLength={registering ? 12 : 1} maxLength="72" autoComplete={registering ? 'new-password' : 'current-password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={registering ? 'At least 12 characters' : 'Your password'} /></label>}
+      {!registering && <button className="auth-forgot-link" type="button" onClick={() => navigate('/forgot-password')}>Forgot password?</button>}
+      {!registering && <p className="stitch-role-note">Customer and administrator accounts use this same sign-in.</p>}
+      {registering && verificationPending && <button className="auth-forgot-link" type="button" disabled={submitting} onClick={resendCode}>Resend verification code</button>}
       <button className="auth-submit" disabled={submitting} type="submit">
-        {submitting ? 'One moment…' : registering ? 'Create your account' : role === 'admin' ? 'Open operations' : 'Enter your showroom'}
+        {submitting ? 'One moment…' : registering ? verificationPending ? 'Verify email & create account' : 'Continue with email verification' : 'Sign in'}
         <ArrowUpRight size={16} />
       </button>
       <div className="auth-switch">
-        {role === 'user' ? (
-          <>
-            <span>{registering ? 'Already part of the club?' : 'New around here?'}</span>
-            <button type="button" onClick={() => { setMode(registering ? 'login' : 'register'); setError(''); setNotice(''); }}>
-              {registering ? 'Sign in' : 'Create an account'}
-            </button>
-          </>
-        ) : <span>Administrator access is provisioned by the dealership.</span>}
+        <span>{registering ? verificationPending ? 'Want to use another email?' : 'Already have an account?' : 'New around here?'}</span>
+        <button type="button" onClick={() => {
+          if (registering && verificationPending) setVerificationPending(false);
+          else setMode(registering ? 'login' : 'register');
+          setOtp(''); setError(''); setNotice('');
+        }}>
+          {registering ? verificationPending ? 'Change details' : 'Sign in' : 'Create an account'}
+        </button>
       </div>
       <span className="form-secure"><LockKeyhole size={13} /> YOUR DETAILS STAY YOURS</span>
     </form>

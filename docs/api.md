@@ -4,6 +4,8 @@ The API is served from the same origin as the built frontend under `/api`. JSON 
 
 ## Authentication
 
+Customers and administrators use the same login endpoint and page. The API returns the assigned role, and the frontend routes the signed-in account accordingly. Public registration can create customer accounts only and requires email verification.
+
 ### `POST /api/auth/register`
 
 Public. Request:
@@ -12,7 +14,11 @@ Public. Request:
 { "name": "Taylor Driver", "email": "taylor@example.com", "password": "a-unique-password-12" }
 ```
 
-Returns `201` with `{ "user": { "id", "name", "email", "role" } }`. Public registration always creates a `user` role. Returns `400` for invalid input and `409` for a duplicate email.
+Starts registration by emailing a six-digit code. Returns `202` with a message; the account is not created and cannot sign in until the code is verified. Codes expire after 10 minutes, allow five attempts, and can be resent after one minute. Requires `RESEND_API_KEY` and `PASSWORD_RESET_FROM`. Returns `400` for invalid input, `409` if the email already has an account, and `503` if email delivery is not configured.
+
+### `POST /api/auth/register/verify`
+
+Public and rate limited. Request: `{ "email": "taylor@example.com", "code": "123456" }`. A valid code creates a customer account and returns `201` with `{ "token": "...", "user": { "id", "name", "email", "role" } }`, signing the customer in. Invalid, expired, or already used codes return `400`; five incorrect attempts lock the code.
 
 ### `POST /api/auth/login`
 
@@ -27,6 +33,23 @@ Authenticated. Returns the current public user object. Missing, invalid, or expi
 ### `POST /api/auth/logout`
 
 Authenticated. Revokes the current token immediately and returns `204`. The client must sign in again to obtain a new token.
+
+### `POST /api/auth/forgot-password`
+
+Public and rate limited. Request: `{ "email": "taylor@example.com" }`. Always returns the same generic response so the endpoint does not reveal whether an email has an account. When Resend is configured on the API host, an account with that address receives a single-use reset link that expires after 30 minutes. Configure `RESEND_API_KEY`, `PASSWORD_RESET_FROM` (a verified sender), and `APP_ORIGIN` (the exact HTTPS frontend origin).
+
+### `POST /api/auth/reset-password`
+
+Public and rate limited. Request: `{ "token": "...", "password": "a-new-unique-password-12" }`. Consumes a valid, unexpired reset token, changes the password, and invalidates existing access tokens. Invalid or expired links return `400`.
+
+## Customer account
+
+All account routes require a customer access token.
+
+- `GET /api/account` returns the signed-in customer's public profile.
+- `PUT /api/account` accepts `{ "name": "Taylor Driver", "phone": "+1 555 0100", "deliveryAddress": "..." }` and saves contact and delivery details. Email is read-only.
+- `GET /api/account/orders` returns paid purchase history and outstanding checkout reservations for that customer, including vehicle, amount, status, purchase time, delivery details, and payment reference when available.
+- `POST /api/account/password` accepts `{ "currentPassword": "...", "newPassword": "..." }`, verifies the current password, changes it, and signs the customer into a new session while invalidating older tokens.
 
 ## Inventory
 
@@ -71,25 +94,27 @@ Accepts the same complete vehicle fields as creation and returns the updated veh
 
 ### `DELETE /api/vehicles/{id}` — administrator
 
-Returns `204` on deletion, `404` if missing, or `409` if historical purchases reference the vehicle.
+Returns `204` on deletion, `404` if missing, or `409` if purchase or checkout history references the vehicle.
 
-### `POST /api/vehicles/{id}/purchase`
+### `POST /api/vehicles/{id}/checkout`
 
-Authenticated user. Purchases one unit. Returns:
+Authenticated customer. Request buyer and delivery details (`customerName`, `email`, `phone`, `deliveryAddress`). The server reads the current listed vehicle price, reserves one unit for 15 minutes, and creates a Razorpay order. Returns `checkoutId`, Razorpay `orderId`, public `keyId`, amount in paise, currency, vehicle summary, and payment prefill details. Returns `409` if unavailable or `503` if payment credentials are not configured.
 
-```json
-{
-  "vehicle": { "id": "...", "quantity": 2 },
-  "purchase": {
-    "id": "...", "vehicleId": "...", "quantity": 1,
-    "unitPrice": 3990061.66, "totalAmount": 3990061.66
-  }
-}
-```
+### `POST /api/checkout/{id}/verify`
 
-The stock decrement and historical price snapshot are committed atomically. Returns `404` for a missing vehicle or `409` when stock is exhausted. A failed operation does not create a purchase record.
+Authenticated owner of the checkout. Request: `{ "paymentId": "pay_...", "signature": "..." }`. The server checks the Checkout HMAC and fetches the payment from Razorpay; only a captured payment matching the stored order and amount creates a purchase and completes the reservation. A captured payment for an expired or released reservation is refunded.
 
-Customers cannot purchase unlisted vehicles.
+### `POST /api/checkout/{id}/cancel`
+
+Authenticated owner of the checkout. Releases the reserved unit if the checkout is still pending. Returns `204`.
+
+### `POST /api/payments/razorpay/webhook`
+
+Razorpay webhook endpoint. Verify `payment.captured` and `payment.failed` with `RAZORPAY_WEBHOOK_SECRET`. Configure this endpoint in Razorpay Dashboard for recovery when a browser closes before payment confirmation.
+
+### `POST /api/vehicles/{id}/purchase` (retired)
+
+Returns `410`. Purchases must use the verified checkout flow; direct stock decrement is disabled.
 
 ### `POST /api/vehicles/{id}/restock` — administrator
 
@@ -153,7 +178,9 @@ Migration 004 converts earlier USD inventory prices and purchase snapshots into 
 - `403`: authenticated user lacks administrator privileges.
 - `404`: requested API route or resource does not exist.
 - `409`: email conflict, insufficient stock, or a vehicle with purchase history.
+- `410`: retired direct-purchase endpoint; use the verified checkout routes.
 - `429`: authentication or AI Car Finder rate limit exceeded.
+- `503`: payment checkout is not configured on the API host.
 - `500`: generic internal error; stack traces are not sent to clients.
 
 The static OpenAPI 3.0 contract is in [`openapi.yaml`](./openapi.yaml). Swagger UI is not bundled.

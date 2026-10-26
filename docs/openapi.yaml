@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Apex Auto Dealership API
   version: 3.0.0
-  description: Public vehicle catalogue, authenticated showroom, customer enquiries, and administrator operations.
+  description: Public vehicle catalogue, email-verified registration, a shared customer and administrator sign-in, customer enquiries, and administrator operations.
 servers:
   - url: /api
 security:
@@ -11,7 +11,7 @@ paths:
   /auth/register:
     post:
       security: []
-      summary: Register a customer account
+      summary: Send an email verification code to begin customer registration
       requestBody:
         required: true
         content:
@@ -19,12 +19,33 @@ paths:
             schema:
               $ref: '#/components/schemas/Registration'
       responses:
-        '201':
-          description: Account created
+        '202':
+          description: Verification code sent; account is created after successful code verification
         '400':
           description: Invalid request
         '409':
           description: Email is already registered
+        '429':
+          description: Too many requests or a code was sent less than one minute ago
+        '503':
+          description: Email verification is not configured
+  /auth/register/verify:
+    post:
+      security: []
+      summary: Verify the registration code and create a customer account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrationVerification'
+      responses:
+        '201':
+          description: Email verified; account created and signed in
+        '400':
+          description: Invalid or expired code
+        '429':
+          description: Too many verification attempts
   /auth/login:
     post:
       security: []
@@ -424,14 +445,60 @@ paths:
     parameters:
       - $ref: '#/components/parameters/id'
     post:
-      summary: Purchase one unit and record its price snapshot
+      summary: Retired direct-purchase endpoint
+      responses:
+        '410':
+          description: Use the secure payment checkout flow
+  /vehicles/{id}/checkout:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    post:
+      summary: Reserve one unit and create a Razorpay order
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customerName, email, phone, deliveryAddress]
+              properties:
+                customerName: { type: string, minLength: 2, maxLength: 80 }
+                email: { type: string, format: email }
+                phone: { type: string, minLength: 7, maxLength: 20 }
+                deliveryAddress: { type: string, minLength: 8, maxLength: 500 }
+      responses:
+        '201':
+          description: Razorpay order and temporary stock reservation
+        '409':
+          description: Vehicle is unavailable
+        '503':
+          description: Payment gateway is not configured
+  /checkout/{id}/verify:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    post:
+      summary: Verify captured payment and complete purchase
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paymentId, signature]
+              properties:
+                paymentId: { type: string }
+                signature: { type: string }
       responses:
         '200':
-          description: Updated vehicle and purchase record
-        '404':
-          description: Vehicle not found
+          description: Payment verified and purchase completed
+        '400':
+          description: Invalid payment signature
         '409':
-          description: Vehicle is out of stock
+          description: Checkout expired or payment is not captured
   /vehicles/{id}/restock:
     parameters:
       - $ref: '#/components/parameters/id'
@@ -504,6 +571,16 @@ components:
           type: string
           minLength: 12
           maxLength: 72
+    RegistrationVerification:
+      type: object
+      required: [email, code]
+      properties:
+        email:
+          type: string
+          format: email
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
     VehicleInput:
       type: object
       required: [make, model, category, price, quantity]
