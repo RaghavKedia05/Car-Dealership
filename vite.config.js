@@ -1,9 +1,8 @@
 const { defineConfig } = require('vite');
 const react = require('@vitejs/plugin-react').default;
-const tailwindcss = require('@tailwindcss/vite').default;
 
 module.exports = defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react()],
   server: {
     watch: {
       ignored: ['**/data/**'],

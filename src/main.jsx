@@ -143,6 +143,7 @@ function App() {
   }));
   const { pathname, search } = location;
   const [authMode, setAuthMode] = useState('login');
+  const [authRole, setAuthRole] = useState('user');
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState(null);
@@ -472,16 +473,25 @@ function App() {
     || pathname === '/admin/dashboard') {
     let pageContent;
     if (pathname === '/') {
-      pageContent = <PublicLanding navigate={navigate} />;
+      pageContent = <PublicLanding api={api} navigate={navigate} isAdmin={isAdmin} session={session} />;
     } else if (pathname === '/login') {
       pageContent = (
-        <section className="public-auth-page">
-          <p className="eyebrow"><span className="eyebrow-line" /> ACCOUNT ACCESS</p>
-          <h1>Welcome to your <span>showroom.</span></h1>
-          <p>Sign in to browse the showroom. Administrators are directed to the dashboard after sign-in.</p>
+        <section className="public-auth-page stitch-auth-layout">
+          <div className="stitch-auth-intro">
+            <p className="eyebrow"><span className="eyebrow-line" /> APEX AUTO · PRECISION, IN FOCUS</p>
+            <h1>Every great drive<br />starts with <span>the right key.</span></h1>
+            <p>Sign in to explore your showroom. Dealership administrators can use the same secure gateway to reach operations.</p>
+            <ul className="stitch-auth-benefits">
+              <li><ShieldCheck size={17} /> Secure, role-based access</li>
+              <li><Database size={17} /> Live inventory from the dealership</li>
+              <li><Sparkles size={17} /> A smarter way to find your next car</li>
+            </ul>
+          </div>
           <AuthForm
             mode={authMode}
             setMode={setAuthMode}
+            role={authRole}
+            setRole={setAuthRole}
             onAuthenticated={saveSession}
             setError={setError}
             error={error}
@@ -508,13 +518,37 @@ function App() {
     return (
       <div className="public-app">
         <a className="skip-link" href="#main-content">Skip to main content</a>
-        <PublicHeader session={session} isAdmin={isAdmin} signOut={signOut} navigate={navigate} />
-        <main id="main-content" className="public-main" tabIndex="-1">{pageContent}</main>
+        <PublicHeader session={session} isAdmin={isAdmin} signOut={signOut} navigate={navigate} pathname={pathname} />
+        <main
+          id="main-content"
+          className={`public-main ${pathname === '/' ? 'public-home-main' : ''}`}
+          tabIndex="-1"
+        >
+          {pageContent}
+        </main>
         <GlobalErrorToast notification={toastError} onDismiss={() => setToastError(null)} />
-        <footer className="public-footer">
-          <span>VEHICLE DETAILS ARE SHOWN AS RECORDED IN THE CURRENT CATALOGUE.</span>
-          <span>© {new Date().getFullYear()} APEX AUTO</span>
-        </footer>
+        {pathname === '/' ? (
+          <footer className="public-footer landing-footer">
+            <a className="landing-footer-brand" href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}>
+              <span>APEX AUTO</span>
+              <small>PRECISION CRAFTED AUTOMOTIVE</small>
+            </a>
+            <nav aria-label="Footer navigation">
+              <a href="/showroom" onClick={(event) => {
+                event.preventDefault();
+                navigate(session ? (isAdmin ? '/admin/inventory' : '/showroom') : '/login');
+              }}>Showroom</a>
+              <a href="/contact" onClick={(event) => { event.preventDefault(); navigate('/contact'); }}>Concierge</a>
+              <a href="/login" onClick={(event) => { event.preventDefault(); navigate('/login'); }}>Dealership admin</a>
+            </nav>
+            <span>© {new Date().getFullYear()} Apex Auto. All rights reserved.</span>
+          </footer>
+        ) : (
+          <footer className="public-footer">
+            <span>VEHICLE DETAILS ARE SHOWN AS RECORDED IN THE CURRENT CATALOGUE.</span>
+            <span>© {new Date().getFullYear()} APEX AUTO</span>
+          </footer>
+        )}
       </div>
     );
   }
@@ -523,7 +557,7 @@ function App() {
     return (
       <div className="public-app">
         <a className="skip-link" href="#main-content">Skip to main content</a>
-        <PublicHeader session={session} isAdmin={isAdmin} signOut={signOut} navigate={navigate} />
+        <PublicHeader session={session} isAdmin={isAdmin} signOut={signOut} navigate={navigate} pathname={pathname} />
         <main id="main-content" className="public-main public-not-found" tabIndex="-1">
           <p className="eyebrow"><span className="eyebrow-line" /> PAGE NOT FOUND</p>
           <h1>That road <span>ends here.</span></h1>
@@ -536,17 +570,27 @@ function App() {
   }
 
   return (
-    <div className="apex-app">
+    <div className={`apex-app ${isAdmin ? 'stitch-admin-app' : ''}`}>
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <header className="apex-header">
         <a className="apex-brand" href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }} aria-label="Apex Auto home">
           <span className="apex-brand-mark"><CarFront size={22} strokeWidth={1.8} /></span>
           <span>APEX AUTO<small>INVENTORY, IN FOCUS</small></span>
         </a>
-        <nav className="apex-desktop-nav" aria-label="Showroom">
-          <a href="#ai-finder"><Sparkles size={15} /> Finder</a>
-          <a href="#inventory"><CarFront size={15} /> Inventory</a>
-          <a href="/contact" onClick={(event) => { event.preventDefault(); navigate('/contact'); }}>Contact</a>
+        <nav className="apex-desktop-nav" aria-label={isAdmin ? 'Administration' : 'Showroom'}>
+          {isAdmin ? (
+            <>
+              <a href="/admin/dashboard" onClick={(event) => { event.preventDefault(); navigate('/admin/dashboard'); }}><Activity size={15} /> Operations</a>
+              <a href="#inventory"><CarFront size={15} /> Inventory</a>
+              <a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}>Public site</a>
+            </>
+          ) : (
+            <>
+              <a href="#ai-finder"><Sparkles size={15} /> Finder</a>
+              <a href="#inventory"><CarFront size={15} /> Inventory</a>
+              <a href="/contact" onClick={(event) => { event.preventDefault(); navigate('/contact'); }}>Contact</a>
+            </>
+          )}
         </nav>
         <div className="apex-header-actions">
           <span className={`api-health api-health-${apiStatus.state}`} role="status">
@@ -555,7 +599,6 @@ function App() {
           </span>
           {session ? (
             <>
-              {isAdmin && <button className="apex-admin-tag" type="button" onClick={() => navigate('/admin/dashboard')}><ShieldCheck size={13} /> Dashboard</button>}
               <span className="apex-user"><UserRound size={15} /> {session.user.name.split(' ')[0]}</span>
               <button className="apex-signout" type="button" onClick={signOut} aria-label="Sign out" title="Sign out">
                 <LogOut size={17} />
@@ -567,24 +610,32 @@ function App() {
         </div>
       </header>
 
-      <main className="apex-main" id="main-content" tabIndex="-1">
-        <AICarFinder
-          session={session}
-          onPurchase={handlePurchase}
-          onUnauthorized={signOut}
-          apiStatus={apiStatus}
-        />
+      <main className={`apex-main ${isAdmin ? 'stitch-admin-main' : ''}`} id="main-content" tabIndex="-1">
+        {isAdmin ? (
+          <section className="stitch-inventory-heading">
+            <p className="eyebrow"><span className="eyebrow-line" /> DEALERSHIP OPERATIONS · INVENTORY CONTROL</p>
+            <h1>Manage the <span>fleet.</span></h1>
+            <p>Review live stock, update verified vehicle details, and control listing visibility.</p>
+          </section>
+        ) : (
+          <AICarFinder
+            session={session}
+            onPurchase={handlePurchase}
+            onUnauthorized={signOut}
+            apiStatus={apiStatus}
+          />
+        )}
 
         <section className="collection-section" id="inventory">
           <div className="section-heading">
             <div>
               <p className="eyebrow"><span className="eyebrow-line" /> LIVE DEALERSHIP INVENTORY</p>
-              <h2>Browse the <span>showroom.</span></h2>
+              <h2>{isAdmin ? <>Inventory <span>allocation.</span></> : <>Browse the <span>showroom.</span></>}</h2>
             </div>
             {session && (
               <div className="collection-meta">
                 <span className="inventory-count">{loading ? '…' : String(pagination.total).padStart(2, '0')}</span>
-                <span>CURATED VEHICLES</span>
+                <span>{isAdmin ? 'TOTAL RECORDS' : 'CURATED VEHICLES'}</span>
               </div>
             )}
           </div>
@@ -766,9 +817,19 @@ function App() {
       </footer>
 
       <nav className="apex-bottom-nav" aria-label="Showroom navigation">
-        <a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}><CarFront size={18} /><span>Home</span></a>
-        <a href="#ai-finder"><Sparkles size={18} /><span>Finder</span></a>
-        <a href="#inventory"><CarFront size={18} /><span>Inventory</span></a>
+        {isAdmin ? (
+          <>
+            <a href="/admin/dashboard" onClick={(event) => { event.preventDefault(); navigate('/admin/dashboard'); }}><Activity size={18} /><span>Operations</span></a>
+            <a href="#inventory"><CarFront size={18} /><span>Inventory</span></a>
+            <a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}><CarFront size={18} /><span>Public site</span></a>
+          </>
+        ) : (
+          <>
+            <a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}><CarFront size={18} /><span>Home</span></a>
+            <a href="#ai-finder"><Sparkles size={18} /><span>Finder</span></a>
+            <a href="#inventory"><CarFront size={18} /><span>Inventory</span></a>
+          </>
+        )}
         {session ? (
           <button type="button" onClick={signOut}><LogOut size={18} /><span>Sign out</span></button>
         ) : (
@@ -781,7 +842,7 @@ function App() {
   );
 }
 
-function PublicHeader({ session, isAdmin, signOut, navigate }) {
+function PublicHeader({ session, isAdmin, signOut, navigate, pathname }) {
   function follow(event, path) {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
@@ -794,16 +855,32 @@ function PublicHeader({ session, isAdmin, signOut, navigate }) {
         <span className="apex-brand-mark"><CarFront size={22} strokeWidth={1.8} /></span>
         <span>APEX AUTO<small>INVENTORY, IN FOCUS</small></span>
       </a>
-      <nav className="public-nav" aria-label="Main navigation">
-        <a href="/#top">Home</a>
-        <a href="/showroom" onClick={(event) => follow(event, session ? (isAdmin ? '/admin/dashboard' : '/showroom') : '/login')}>Showroom</a>
-        <a href="/#about">About</a>
-        <a href="/contact" onClick={(event) => follow(event, '/contact')}>Contact</a>
+      <nav className="public-nav" aria-label={isAdmin ? 'Administration navigation' : 'Main navigation'}>
+        {isAdmin ? (
+          <>
+            <a className={pathname === '/admin/dashboard' ? 'active' : ''} href="/admin/dashboard" onClick={(event) => follow(event, '/admin/dashboard')}>Operations</a>
+            <a className={pathname === '/admin/inventory' ? 'active' : ''} href="/admin/inventory" onClick={(event) => follow(event, '/admin/inventory')}>Inventory</a>
+            <a href="/" onClick={(event) => follow(event, '/')}>Public site</a>
+          </>
+        ) : pathname === '/' ? (
+          <>
+            <a href="/showroom" onClick={(event) => follow(event, session ? '/showroom' : '/login')}>Showroom</a>
+            <a href="#featured-allocations">Inventory</a>
+            <a href="#services">Services</a>
+            <a href="#about">About</a>
+          </>
+        ) : (
+          <>
+            <a href="/#top" onClick={(event) => follow(event, '/')}>Home</a>
+            <a href="/showroom" onClick={(event) => follow(event, session ? '/showroom' : '/login')}>Showroom</a>
+            <a href="/#about" onClick={(event) => follow(event, '/#about')}>About</a>
+            <a href="/contact" onClick={(event) => follow(event, '/contact')}>Contact</a>
+          </>
+        )}
       </nav>
       <div className="public-header-actions">
         {session ? (
           <>
-            {isAdmin && <a className="public-admin-link" href="/admin/dashboard" onClick={(event) => follow(event, '/admin/dashboard')}><ShieldCheck size={15} /> Dashboard</a>}
             <span className="apex-user"><UserRound size={15} /> {session.user.name.split(' ')[0]}</span>
             <button className="apex-signout" type="button" onClick={signOut} aria-label="Sign out" title="Sign out"><LogOut size={17} /></button>
           </>
@@ -818,46 +895,156 @@ function PublicHeader({ session, isAdmin, signOut, navigate }) {
   );
 }
 
-function PublicLanding({ navigate }) {
+function PublicLanding({ api, navigate, isAdmin, session }) {
+  const [featuredVehicles, setFeaturedVehicles] = useState([]);
+  const [loadingFeatured, setLoadingFeatured] = useState(true);
+  const [featuredError, setFeaturedError] = useState(false);
+  const showroomPath = isAdmin ? '/admin/inventory' : session ? '/showroom' : '/login';
+
+  useEffect(() => {
+    let active = true;
+    setLoadingFeatured(true);
+    setFeaturedError(false);
+    api('/api/public/vehicles?page=1&pageSize=3&sortBy=createdAt&sortOrder=desc')
+      .then((result) => {
+        if (active) setFeaturedVehicles(result.vehicles);
+      })
+      .catch(() => {
+        if (active) setFeaturedError(true);
+      })
+      .finally(() => {
+        if (active) setLoadingFeatured(false);
+      });
+    return () => { active = false; };
+  }, [api]);
+
+  function follow(event, path) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    navigate(path);
+  }
+
   return (
     <>
-      <section className="public-hero" id="top">
-        <div className="public-hero-copy">
-          <p className="eyebrow"><span className="eyebrow-line" /> APEX AUTO · EST. FOR THE ROAD AHEAD</p>
-          <h1>Precision crafted<br />automotive <span>excellence.</span></h1>
-          <p className="public-lede">A more considered way to find your next car. Explore a carefully maintained collection with clear details and a dealership team ready to help.</p>
-          <div className="public-hero-actions">
-            <button className="public-button" type="button" onClick={() => navigate('/showroom')}>Enter the showroom <ArrowUpRight size={16} /></button>
-            <a className="public-text-link" href="#about">About the dealership</a>
+      <section className="landing-hero" id="top" aria-labelledby="landing-title">
+        <img
+          className="landing-hero-image"
+          src="https://lh3.googleusercontent.com/aida-public/AB6AXuBU4-_lj0Y2qQDrqVF705J__LybIYgoMli1imgiD1Jd-otTbrcuz282ZhsYu3cdUGUQTO81AiDeRtnkaQpox9YPLD0XokHOiT1emMmA6YRabtJjD617b9kTiZazrwib0puYbGCZi5qoSzpeD20tdOvIFUmZ2cU6dQVu986cTYbFqrlkiBTAlADpJVkI5mSJ3yT88WJ8dr6QjS83hjK1ueluWBmYHbhlEhXeoVtIIDU"
+          alt=""
+          aria-hidden="true"
+          fetchPriority="high"
+          referrerPolicy="no-referrer"
+        />
+        <div className="landing-hero-shade" />
+        <div className="landing-hero-content">
+          <p className="landing-kicker">APEX AUTO <span>·</span> PRECISION CRAFTED AUTOMOTIVE</p>
+          <h1 id="landing-title">Find your next<br /><span>great drive.</span></h1>
+          <p className="landing-hero-lede">Explore our current collection, review the details, and get in touch with a team ready to help you choose with confidence.</p>
+          <div className="landing-hero-actions">
+            <button className="landing-primary-button" type="button" onClick={() => navigate(showroomPath)}>
+              {isAdmin ? 'Manage inventory' : session ? 'Explore showroom' : 'Explore showroom'} <ArrowUpRight size={17} />
+            </button>
+            <button className="landing-secondary-button" type="button" onClick={() => navigate('/contact')}>
+              Enquire with our team
+            </button>
           </div>
-          <p className="public-proof"><ShieldCheck size={16} /> A transparent, people-first dealership experience</p>
         </div>
-        <div className="public-hero-art" aria-hidden="true">
-          <div className="public-hero-orbit" />
-          <CarFront size={310} strokeWidth={0.55} />
-          <span>PRECISION · CARE · CONFIDENCE</span>
+        <div className="landing-hero-caption" aria-hidden="true">
+          <span>THOUGHTFUL SERVICE</span>
+          <span>VEHICLES FOR THE ROAD AHEAD</span>
+          <span>APEX AUTO · INDIA</span>
         </div>
       </section>
 
-      <section className="public-about" id="about" aria-labelledby="public-about-title">
-        <div className="public-about-heading">
-          <p className="eyebrow"><span className="eyebrow-line" /> ABOUT THE DEALERSHIP</p>
-          <h2 id="public-about-title">Good cars. Clear answers.<br /><span>A better way forward.</span></h2>
+      <section className="landing-featured" id="featured-allocations" aria-labelledby="landing-featured-title">
+        <div className="landing-section-heading">
+          <div>
+            <p className="landing-kicker">CURATED INVENTORY</p>
+            <h2 id="landing-featured-title">Featured <span>allocations.</span></h2>
+          </div>
+          <a className="landing-view-all" href={showroomPath} onClick={(event) => follow(event, showroomPath)}>
+            View complete fleet <ArrowUpRight size={16} />
+          </a>
         </div>
-        <div className="public-about-copy">
-          <p>At Apex Auto, choosing a vehicle should feel informed, personal, and straightforward. We bring our live dealership collection together with thoughtful guidance, so you can focus on finding the right fit.</p>
-          <p>Our team keeps listing information grounded in the details available to us, answers your questions directly, and helps you explore the next step at your own pace.</p>
-          <button className="public-text-link" type="button" onClick={() => navigate('/contact')}>Talk with our team <ArrowUpRight size={15} /></button>
+        {loadingFeatured ? (
+          <p className="landing-listing-status" role="status">Loading current listings…</p>
+        ) : featuredError ? (
+          <p className="landing-listing-status" role="status">Featured listings are temporarily unavailable. Please try the showroom again later.</p>
+        ) : featuredVehicles.length ? (
+          <div className="landing-vehicle-grid">
+            {featuredVehicles.map((vehicle) => {
+              const title = `${vehicle.make} ${vehicle.model}`;
+              const specifications = [
+                vehicle.year,
+                vehicle.category,
+                vehicle.fuelType,
+                vehicle.mileageKmpl ? `${vehicle.mileageKmpl} km/l` : null,
+              ].filter(Boolean);
+              const vehiclePath = `/vehicles/${encodeURIComponent(vehicle.id)}`;
+              return (
+                <article className="landing-vehicle-card" key={vehicle.id}>
+                  <a className="landing-vehicle-image" href={vehiclePath} onClick={(event) => follow(event, vehiclePath)} aria-label={`View details for ${title}`}>
+                    {vehicle.imageUrl ? (
+                      <img src={vehicle.imageUrl} alt="" loading="lazy" />
+                    ) : (
+                      <CarFront size={54} strokeWidth={1} aria-hidden="true" />
+                    )}
+                    <span className="landing-vehicle-status">{vehicle.quantity > 0 ? 'AVAILABLE' : 'ENQUIRE FOR AVAILABILITY'}</span>
+                  </a>
+                  <div className="landing-vehicle-content">
+                    <p className="landing-vehicle-make">{[vehicle.year, vehicle.make].filter(Boolean).join(' · ')}</p>
+                    <h3>{vehicle.model}</h3>
+                    <p className="landing-vehicle-specs">{specifications.length ? specifications.join(' · ') : 'Contact us for recorded specifications'}</p>
+                    <div className="landing-vehicle-bottom">
+                      <strong>{money(vehicle.price)}</strong>
+                      <a href={vehiclePath} onClick={(event) => follow(event, vehiclePath)}>
+                        View details <ArrowUpRight size={15} />
+                      </a>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="landing-listing-status">There are no vehicles listed at the moment. Please check back soon or contact our team.</p>
+        )}
+      </section>
+
+      <section className="landing-about" id="about" aria-labelledby="landing-about-title">
+        <div className="landing-about-copy">
+          <p className="landing-kicker">ABOUT APEX AUTO</p>
+          <h2 id="landing-about-title">A more considered way to find <span>your next car.</span></h2>
+          <p>Choosing a vehicle should feel informed, personal, and straightforward. We bring our current dealership collection together with clear recorded details and a team ready to answer your questions.</p>
         </div>
-        <div className="public-about-values">
-          <article><span className="public-value-icon"><ShieldCheck size={20} /></span><h3>Curated collection</h3><p>Explore vehicles currently listed by the dealership, with availability and specifications shown as recorded.</p></article>
-          <article><span className="public-value-icon"><Check size={20} /></span><h3>Clear information</h3><p>Ask questions, review vehicle details, and make decisions with an honest view of what is known.</p></article>
-          <article><span className="public-value-icon"><UserRound size={20} /></span><h3>Personal guidance</h3><p>Our enquiry team can help you learn more about a vehicle or begin a conversation about your needs.</p></article>
+        <div className="landing-benefits" id="services">
+          <article>
+            <span className="landing-benefit-icon"><Check size={21} /></span>
+            <h3>Current listings</h3>
+            <p>Featured vehicles come from the live public catalogue, with availability shown as recorded.</p>
+          </article>
+          <article>
+            <span className="landing-benefit-icon"><ShieldCheck size={21} /></span>
+            <h3>Clear information</h3>
+            <p>Review the specifications available for each listing and ask us to clarify what matters to you.</p>
+          </article>
+          <article>
+            <span className="landing-benefit-icon"><UserRound size={21} /></span>
+            <h3>Personal guidance</h3>
+            <p>Send an enquiry to start a conversation with the dealership team at your own pace.</p>
+          </article>
         </div>
       </section>
-      <section className="public-contact-cta">
-        <div><p className="eyebrow"><span className="eyebrow-line" /> YOUR NEXT DRIVE STARTS HERE</p><h2>Ready to find your <span>next car?</span></h2><p>Sign in to discover the live showroom, search listings, and use the AI Car Finder.</p></div>
-        <button className="public-button" type="button" onClick={() => navigate('/showroom')}>Explore the showroom <ArrowUpRight size={16} /></button>
+
+      <section className="landing-contact-cta" aria-labelledby="landing-contact-title">
+        <div>
+          <p className="landing-kicker">YOUR NEXT DRIVE STARTS HERE</p>
+          <h2 id="landing-contact-title">Ready to find your <span>next car?</span></h2>
+          <p>Explore the showroom or send us a question about a vehicle.</p>
+        </div>
+        <button className="landing-primary-button" type="button" onClick={() => navigate('/contact')}>
+          Talk with our team <ArrowUpRight size={17} />
+        </button>
       </section>
     </>
   );
@@ -997,9 +1184,15 @@ function AdminDashboard({ api, onUnauthorized, onInventory }) {
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState('');
   const [reload, setReload] = useState(0);
+  const [restockVehicle, setRestockVehicle] = useState(null);
+  const [restockAmount, setRestockAmount] = useState('1');
+  const [restocking, setRestocking] = useState(false);
+  const restockDialogRef = useRef(null);
+  useDialogAccessibility(restockDialogRef, () => setRestockVehicle(null), Boolean(restockVehicle));
 
   useEffect(() => {
     let active = true;
@@ -1029,6 +1222,7 @@ function AdminDashboard({ api, onUnauthorized, onInventory }) {
   async function updateEnquiry(id, nextStatus) {
     setUpdatingId(id);
     setError('');
+    setSuccess('');
     try {
       const result = await api(`/api/admin/enquiries/${id}`, {
         method: 'PATCH',
@@ -1058,6 +1252,46 @@ function AdminDashboard({ api, onUnauthorized, onInventory }) {
     setSearch(searchInput.trim());
   }
 
+  async function submitRestock(event) {
+    event.preventDefault();
+    if (!restockVehicle) return;
+    const quantity = Number(restockAmount);
+    if (!Number.isInteger(quantity) || quantity < 1) return;
+    setRestocking(true);
+    setError('');
+    setSuccess('');
+    try {
+      const result = await api(`/api/vehicles/${restockVehicle.id}/restock`, {
+        method: 'POST',
+        body: JSON.stringify({ quantity }),
+      });
+      const previousQuantity = restockVehicle.quantity;
+      const updatedVehicle = result.vehicle;
+      setDashboard((current) => current ? {
+        ...current,
+        inventory: {
+          ...current.inventory,
+          availableVehicles: current.inventory.availableVehicles
+            + (updatedVehicle.status === 'listed' && previousQuantity === 0 ? 1 : 0),
+          soldVehicles: current.inventory.soldVehicles
+            - (updatedVehicle.status === 'listed' && previousQuantity === 0 ? 1 : 0),
+          inventoryValue: current.inventory.inventoryValue + (updatedVehicle.price * quantity),
+        },
+        recentVehicles: current.recentVehicles.map((vehicle) => (
+          vehicle.id === updatedVehicle.id ? updatedVehicle : vehicle
+        )),
+      } : current);
+      setSuccess(`${updatedVehicle.make} ${updatedVehicle.model} restocked by ${quantity} ${quantity === 1 ? 'unit' : 'units'}.`);
+      setRestockVehicle(null);
+      setRestockAmount('1');
+    } catch (requestError) {
+      setError(requestError.message);
+      if (requestError.status === 401 || requestError.status === 403) onUnauthorized();
+    } finally {
+      setRestocking(false);
+    }
+  }
+
   return (
     <section className="admin-dashboard">
       <div className="admin-page-heading">
@@ -1065,6 +1299,7 @@ function AdminDashboard({ api, onUnauthorized, onInventory }) {
         <button className="public-button" type="button" onClick={onInventory}>Manage inventory <CarFront size={16} /></button>
       </div>
       {error && <div className="notice notice-error" role="alert">{error}<button type="button" onClick={() => setReload((current) => current + 1)}>Retry</button></div>}
+      {success && <div className="notice notice-success" role="status"><Check size={17} /> {success}<button type="button" aria-label="Dismiss notification" onClick={() => setSuccess('')}><X size={15} /></button></div>}
       {loading && !dashboard ? <div className="empty-state"><div className="loading-spinner" /><p>Loading dealership data…</p></div> : dashboard && (
         <>
           <div className="admin-metric-grid">
@@ -1079,16 +1314,22 @@ function AdminDashboard({ api, onUnauthorized, onInventory }) {
               <AdminBreakdown title="By body type" groups={dashboard.groups.bodyType} />
               <AdminBreakdown title="By fuel" groups={dashboard.groups.fuelType} />
             </section>
-            <section className="admin-panel"><div className="admin-panel-heading"><div><p className="eyebrow"><span className="eyebrow-line" /> RECENT STOCK CHANGES</p><h2>Recently <span>updated.</span></h2></div></div>
+            <section className="admin-panel"><div className="admin-panel-heading"><div><p className="eyebrow"><span className="eyebrow-line" /> FLEET TELEMETRY</p><h2>Recent <span>allocations.</span></h2></div><button className="stitch-table-action" type="button" onClick={onInventory}>Manage inventory <ArrowUpRight size={15} /></button></div>
               {dashboard.recentVehicles.length ? (
-                <ul className="admin-recent-list">
-                  {dashboard.recentVehicles.map((vehicle) => (
-                    <li key={vehicle.id}>
-                      <div><strong>{vehicle.make} {vehicle.model}</strong><span>{vehicle.status} · {vehicle.quantity} in stock</span></div>
-                      <strong>{money(vehicle.price)}</strong>
-                    </li>
-                  ))}
-                </ul>
+                <div className="stitch-stock-table-wrap">
+                  <table className="stitch-stock-table">
+                    <thead><tr><th scope="col">Vehicle</th><th scope="col">Listing</th><th scope="col">Available</th><th scope="col">Unit price</th><th scope="col">Action</th></tr></thead>
+                    <tbody>{dashboard.recentVehicles.map((vehicle) => (
+                      <tr key={vehicle.id}>
+                        <td><strong>{vehicle.make} {vehicle.model}</strong><span>{vehicle.year || vehicle.category}</span></td>
+                        <td><span className={`stitch-stock-status ${vehicle.status}`}>{vehicle.status}</span></td>
+                        <td>{vehicle.quantity}</td>
+                        <td>{money(vehicle.price)}</td>
+                        <td><button className="stitch-restock-button" type="button" onClick={() => { setRestockVehicle(vehicle); setRestockAmount('1'); }}>Restock</button></td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
               ) : <p className="admin-empty">No vehicle listings have been added yet.</p>}
             </section>
           </div>
@@ -1107,6 +1348,35 @@ function AdminDashboard({ api, onUnauthorized, onInventory }) {
             {pagination.totalPages > 1 && <nav className="inventory-pagination" aria-label="Enquiry pages"><button type="button" disabled={pagination.page <= 1 || loading} onClick={() => setPagination((current) => ({ ...current, page: current.page - 1 }))}>Previous</button><span>Page {pagination.page} of {pagination.totalPages}</span><button type="button" disabled={pagination.page >= pagination.totalPages || loading} onClick={() => setPagination((current) => ({ ...current, page: current.page + 1 }))}>Next</button></nav>}
           </section>
         </>
+      )}
+      {restockVehicle && (
+        <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setRestockVehicle(null); }}>
+          <form className="stitch-restock-dialog" ref={restockDialogRef} role="dialog" aria-modal="true" aria-labelledby="restock-title" onSubmit={submitRestock} tabIndex="-1">
+            <div className="editor-header">
+              <div><p className="eyebrow"><span className="eyebrow-line" /> LIVE STOCK CONTROL</p><h2 id="restock-title">Restock {restockVehicle.make} {restockVehicle.model}</h2></div>
+              <button className="icon-button" type="button" aria-label="Close restock dialog" onClick={() => setRestockVehicle(null)}><X size={18} /></button>
+            </div>
+            <p>Current allocation: <strong>{restockVehicle.quantity}</strong></p>
+            <label className="form-label">UNITS TO ADD
+              <input
+                autoFocus
+                required
+                type="number"
+                min="1"
+                max={Math.max(1_000_000 - restockVehicle.quantity, 0)}
+                step="1"
+                value={restockAmount}
+                onChange={(event) => setRestockAmount(event.target.value)}
+              />
+            </label>
+            <div className="stitch-restock-actions">
+              <button className="finder-secondary" type="button" disabled={restocking} onClick={() => setRestockVehicle(null)}>Cancel</button>
+              <button className="public-button" type="submit" disabled={restocking || restockVehicle.quantity >= 1_000_000}>
+                {restocking ? 'Updating stock…' : 'Confirm restock'}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </section>
   );
@@ -1583,14 +1853,16 @@ function VehicleCard({ vehicle, index, isAdmin, busy, onPurchase, onEdit, onDele
         </div>
         <div className="vehicle-card-footer">
           <div><span className="price-caption">YOUR NEXT CHAPTER FROM</span><span className="vehicle-price">{money(vehicle.price)}</span></div>
-          <button
-            className={`purchase-button ${soldOut ? 'purchase-disabled' : ''}`}
-            type="button"
-            disabled={soldOut || busy || vehicle.status === 'unlisted'}
-            onClick={() => onPurchase(vehicle)}
-          >
-            {busy ? <span className="loading-spinner spinner-small" /> : vehicle.status === 'unlisted' ? 'Unlisted' : soldOut ? 'Sold out' : <>Purchase <ArrowUpRight size={15} /></>}
-          </button>
+          {!isAdmin && (
+            <button
+              className={`purchase-button ${soldOut ? 'purchase-disabled' : ''}`}
+              type="button"
+              disabled={soldOut || busy || vehicle.status === 'unlisted'}
+              onClick={() => onPurchase(vehicle)}
+            >
+              {busy ? <span className="loading-spinner spinner-small" /> : vehicle.status === 'unlisted' ? 'Unlisted' : soldOut ? 'Sold out' : <>Purchase <ArrowUpRight size={15} /></>}
+            </button>
+          )}
         </div>
         {isAdmin && (
           <div className="vehicle-admin-actions">
@@ -1614,7 +1886,7 @@ function GlobalErrorToast({ notification, onDismiss }) {
   );
 }
 
-function AuthForm({ mode, setMode, onAuthenticated, setError, error, notice, setNotice }) {
+function AuthForm({ mode, setMode, role, setRole, onAuthenticated, setError, error, notice, setNotice }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -1649,21 +1921,51 @@ function AuthForm({ mode, setMode, onAuthenticated, setError, error, notice, set
   }
 
   return (
-    <form className="auth-form" onSubmit={submit}>
+    <form className="auth-form stitch-auth-card" onSubmit={submit}>
+      <div className="stitch-role-switch" aria-label="Sign-in destination">
+        <button
+          type="button"
+          aria-pressed={role === 'user'}
+          className={role === 'user' ? 'selected' : ''}
+          onClick={() => setRole('user')}
+        >
+          Customer access
+        </button>
+        <button
+          type="button"
+          aria-pressed={role === 'admin'}
+          className={role === 'admin' ? 'selected' : ''}
+          onClick={() => { setRole('admin'); setMode('login'); setError(''); setNotice(''); }}
+        >
+          Admin access
+        </button>
+      </div>
       <div className="form-topline"><span>YOUR SHOWROOM, AWAITING</span><span>01 / 02</span></div>
-      <h3>{registering ? 'Make yourself at home.' : 'Welcome back.'}</h3>
-      <p>{registering ? 'Create your account. Your next favourite is just around the corner.' : 'A little something good is waiting on the other side.'}</p>
+      <h3>{registering ? 'Make yourself at home.' : role === 'admin' ? 'Welcome to operations.' : 'Welcome back.'}</h3>
+      <p>{registering
+        ? 'Create your customer account to explore the live showroom.'
+        : role === 'admin'
+          ? 'Sign in with your administrator account to manage dealership operations.'
+          : 'Sign in to explore your live showroom and find your next drive.'}</p>
       {notice && <div className="form-success" role="status"><Check size={15} /> {notice}</div>}
       {error && <div className="form-error" role="alert"><CircleHelp size={16} /> {error}</div>}
       {registering && <label className="form-label">YOUR NAME<input required minLength="2" maxLength="80" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Alex Morgan" /></label>}
       <label className="form-label">EMAIL ADDRESS<input required type="email" maxLength="254" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>
       <label className="form-label">PASSWORD<input required type="password" minLength={registering ? 12 : 1} maxLength="72" autoComplete={registering ? 'new-password' : 'current-password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={registering ? 'At least 12 characters' : 'Your password'} /></label>
-      <button className="auth-submit" disabled={submitting} type="submit">{submitting ? 'One moment…' : registering ? 'Create your account' : 'Enter your showroom'} <ArrowUpRight size={16} /></button>
+      {!registering && <p className="stitch-role-note">You’ll be routed according to the role assigned to your account.</p>}
+      <button className="auth-submit" disabled={submitting} type="submit">
+        {submitting ? 'One moment…' : registering ? 'Create your account' : role === 'admin' ? 'Open operations' : 'Enter your showroom'}
+        <ArrowUpRight size={16} />
+      </button>
       <div className="auth-switch">
-        <span>{registering ? 'Already part of the club?' : 'New around here?'}</span>
-        <button type="button" onClick={() => { setMode(registering ? 'login' : 'register'); setError(''); setNotice(''); }}>
-          {registering ? 'Sign in' : 'Create an account'}
-        </button>
+        {role === 'user' ? (
+          <>
+            <span>{registering ? 'Already part of the club?' : 'New around here?'}</span>
+            <button type="button" onClick={() => { setMode(registering ? 'login' : 'register'); setError(''); setNotice(''); }}>
+              {registering ? 'Sign in' : 'Create an account'}
+            </button>
+          </>
+        ) : <span>Administrator access is provisioned by the dealership.</span>}
       </div>
       <span className="form-secure"><LockKeyhole size={13} /> YOUR DETAILS STAY YOURS</span>
     </form>

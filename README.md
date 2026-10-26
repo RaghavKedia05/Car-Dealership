@@ -14,19 +14,19 @@ A full-stack dealership website with a public dealership landing page and enquir
 - Purchase a vehicle with an atomic stock decrement and a historical unit-price snapshot; vehicles at zero stock cannot be purchased.
 - Give administrators a separate inventory-management experience for adding, editing, and removing vehicles.
 - Search available inventory with the AI Car Finder using natural-language requirements; compare up to three vehicles with explanations grounded in recorded catalog data.
-- Use the Apex Auto navy-and-blue storefront on desktop and mobile, with live API/database readiness and per-request status and timing diagnostics.
+- Use a responsive Stitch-inspired dealership storefront, role sign-in, customer finder, and administrator operations views, with live API/database readiness and request diagnostics.
 - Navigate the storefront with visible keyboard focus, a skip-to-content link, responsive controls, and keyboard-accessible modal dialogs.
 - Store optional vehicle specifications, while leaving unknown data explicitly unrecorded.
 - Record listing status, variant, description, and secure HTTPS image links. Images must use external persistent hosting; uploads are not implemented.
 - Persist users, inventory, and purchase records in a local SQLite database. Passwords are stored as bcrypt hashes.
 - Upgrade database schema with versioned SQL migrations.
-- Run the React/Tailwind development server and API together, or build a production frontend served by the API.
+- Run the React development server and API together, or build a production frontend served by the API.
 
 ## Technology
 
 - **API:** Node.js, Express 5, Zod request validation, bcrypt, and JSON Web Tokens.
 - **Database:** SQLite through Node's built-in `node:sqlite` module. It uses a file on disk; no in-memory database or external database service is required.
-- **Frontend:** React 19, Vite, Tailwind CSS 4, and custom responsive CSS.
+- **Frontend:** React 19, Vite, and custom responsive CSS.
 - **Tests:** Node's built-in test runner and Supertest.
 
 Vehicle and purchase amounts are stored and displayed in Indian rupees (INR). On upgrade, migration 004 converts existing USD amounts using a one-time rate of **₹95.001468 per USD**, the open.er-api.com reference rate updated 2026-10-25 UTC. The migration converts both current vehicle prices and existing purchase snapshots, rounds to two decimal places, and does not fetch a rate or perform repeated conversion at runtime. Review this rate and take a database backup before upgrading any production database.
@@ -51,11 +51,12 @@ To inspect local tables and relations, open `data\dealership.db` with [DB Browse
 
 ### Website routes and roles
 
-- `/` is the public landing page and dealership overview; inventory and AI search are not shown there.
+- `/` is the public landing page and dealership overview, with featured vehicles loaded from the public listed-inventory API; the full catalogue and AI finder remain in the authenticated showroom.
 - `/login` is the shared customer/admin sign-in. Successful customer sign-in opens `/showroom`; administrator sign-in opens `/admin/dashboard`.
 - `/showroom` is the authenticated customer catalogue and AI finder. `/admin/dashboard` and `/admin/inventory` require administrator access.
 - `/vehicles` and `/vehicles/:id` require sign-in and direct users to the role-appropriate view; `/contact` accepts guest enquiries.
 - Registration always creates a customer account. Create/promote the initial administrator using `seed-admin.js` above.
+- The Google Stitch export in `stitch_dealership_inventory_system3` is retained as reference material. The storefront also uses the supplied Apex Motors landing-page design, adapted to Apex Auto branding and live listed inventory through the existing Express API and SQLite database.
 
 ### Create the first administrator
 
