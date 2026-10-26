@@ -1,6 +1,7 @@
 const path = require('node:path');
 const { createApp } = require('./app');
 const { createDatabase, createPostgresDatabase } = require('./database');
+const { seedAdmin } = require('./seed-admin');
 
 const port = Number.parseInt(process.env.PORT || '3001', 10);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -44,6 +45,9 @@ function shutdown() {
 
 async function start() {
   if (process.env.DATABASE_URL) await db.migrate();
+  if (process.env.ADMIN_EMAIL || process.env.ADMIN_PASSWORD) {
+    console.log(await seedAdmin(db));
+  }
   const app = createApp({ db, jwtSecret: process.env.JWT_SECRET, corsOrigins });
   if (process.env.TRUST_PROXY_HOPS !== undefined && process.env.TRUST_PROXY_HOPS !== '0') {
     if (!/^\d+$/.test(process.env.TRUST_PROXY_HOPS)) {
