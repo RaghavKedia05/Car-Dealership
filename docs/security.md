@@ -18,7 +18,7 @@
 
 - Set a unique, random `JWT_SECRET` in the deployment environment; do not commit `.env`.
 - Serve production traffic through HTTPS. Configure `TRUST_PROXY_HOPS` only to the exact number of controlled proxies, not arbitrary client-provided forwarded headers.
-- Back up the selected database. SQLite is for one application instance; PostgreSQL supports shared database access, but the in-memory rate limiter is still not shared across replicas.
+- Back up PostgreSQL using provider snapshots or pg_dump. PostgreSQL supports shared database access, but the in-memory rate limiter is still not shared across replicas.
 - The checkout records a pending order and does not collect or process card, UPI, or bank credentials. Dealership staff should only mark an order paid after confirming payment was received outside the site.
 - Rotate the JWT secret deliberately: existing tokens become invalid.
 - Configure `AI_BASE_URL` only for a trusted HTTPS provider endpoint. Keep `AI_API_KEY` in the deployment secret store; never add it to frontend variables or source control.

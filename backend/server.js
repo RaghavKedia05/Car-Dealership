@@ -1,6 +1,5 @@
-const path = require('node:path');
 const { createApp } = require('./app');
-const { createDatabase, createPostgresDatabase } = require('./database/database-adapters');
+const { createPostgresDatabase } = require('./database/postgres-database');
 const { seedAdmin } = require('./seed-admin');
 const { expireCheckoutOrders } = require('./services/order-reservations');
 
@@ -17,9 +16,7 @@ if (!process.env.JWT_SECRET) {
   process.env.JWT_SECRET = require('node:crypto').randomBytes(32).toString('hex');
 }
 
-const db = process.env.DATABASE_URL
-  ? createPostgresDatabase()
-  : createDatabase(process.env.DATABASE_PATH || path.join(__dirname, '..', 'data', 'dealership.db'));
+const db = createPostgresDatabase();
 const corsOrigins = (process.env.CORS_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())
@@ -47,7 +44,7 @@ function shutdown() {
 }
 
 async function start() {
-  if (process.env.DATABASE_URL) await db.migrate();
+  await db.migrate();
   await expireCheckoutOrders(db);
   if (process.env.ADMIN_EMAIL || process.env.ADMIN_PASSWORD) {
     console.log(await seedAdmin(db));

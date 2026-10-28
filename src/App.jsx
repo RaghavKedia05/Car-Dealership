@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Activity, ArrowUpRight, CarFront, Check, ChevronDown, CircleHelp, Database, KeyRound, LockKeyhole, LogOut, Minus, Plus, Search, Sparkles, ShieldCheck, SlidersHorizontal, UserRound, X } from 'lucide-react';
+import { ArrowUpRight, CarFront, Check, ChevronDown, CircleHelp, Database, LockKeyhole, Minus, Plus, Search, Sparkles, ShieldCheck, SlidersHorizontal, X } from "lucide-react";
 import { PublicHeader } from './components/PublicHeader.jsx';
 import { GlobalErrorToast } from './components/GlobalErrorToast.jsx';
 import { PublicLanding } from './features/public/PublicLanding.jsx';
@@ -46,7 +46,6 @@ export function App() {
   const [checkoutVehicle, setCheckoutVehicle] = useState(null);
   const checkoutResolver = useRef(null);
   const [mobileFilters, setMobileFilters] = useState(false);
-  const [apiStatus, setApiStatus] = useState({ state: 'checking', latency: null });
   const isAdmin = session?.user.role === 'admin';
 
   function handleAccountUpdated(user) {
@@ -99,28 +98,6 @@ export function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    const startedAt = performance.now();
-    fetch(apiUrl('/healthz'), { cache: 'no-store' })
-      .then((response) => parseApiResponse(response, `Health check returned HTTP ${response.status}`))
-      .then((body) => {
-        if (active) {
-          setApiStatus({
-            state: body.status === 'ok' ? 'online' : 'error',
-            latency: Math.round(performance.now() - startedAt),
-          });
-        }
-      })
-      .catch((requestError) => {
-        if (active) {
-          console.error('Could not verify API and database health:', requestError);
-          reportError(requestError);
-          setApiStatus({ state: 'error', latency: null });
-        }
-      });
-    return () => { active = false; };
-  }, []);
 
   const api = useCallback(async (url, options = {}) => {
     const response = await fetch(apiUrl(url), {
@@ -164,7 +141,7 @@ export function App() {
 
   useEffect(() => {
     const vehicleDetailRoute = pathname.startsWith('/vehicles/');
-    if ((['/vehicles', '/admin/inventory'].includes(pathname) || vehicleDetailRoute) && !session) {
+    if (pathname === '/admin/inventory' && !session) {
       navigate('/login');
       return;
     }
@@ -180,7 +157,7 @@ export function App() {
       navigate('/admin/dashboard');
       return;
     }
-    if (pathname === '/vehicles' && session) {
+    if (pathname === '/vehicles') {
       navigate('/showroom');
       return;
     }
@@ -188,7 +165,7 @@ export function App() {
       navigate(isAdmin ? '/admin/dashboard' : '/showroom');
       return;
     }
-    if (['/showroom', '/admin/dashboard', '/admin/inventory'].includes(pathname) && !session) {
+    if (['/admin/dashboard', '/admin/inventory'].includes(pathname) && !session) {
       navigate('/login');
       return;
     }
@@ -202,7 +179,7 @@ export function App() {
   }, [pathname, session, isAdmin, navigate]);
 
   useEffect(() => {
-    if (!session || !['/showroom', '/admin/inventory'].includes(pathname)) return undefined;
+    if (!['/showroom', '/admin/inventory'].includes(pathname) || (pathname === '/admin/inventory' && !isAdmin)) return undefined;
     const search = new URLSearchParams();
     if (make.trim()) search.set('make', make.trim());
     if (model.trim()) search.set('model', model.trim());
@@ -214,7 +191,7 @@ export function App() {
     search.set('sortBy', sortBy);
     search.set('sortOrder', sortOrder);
     const query = search.toString();
-    const endpoint = `/api/vehicles/search?${query}`;
+    const endpoint = session ? `/api/vehicles/search?${query}` : `/api/public/vehicles?${query}`;
     let active = true;
     const timer = window.setTimeout(async () => {
       setLoading(true);
@@ -271,6 +248,7 @@ export function App() {
   }, [session, navigate]);
 
   function handlePurchase(vehicle) {
+    if (!session) { navigate('/login'); return Promise.resolve(null); }
     setBusyId(vehicle.id);
     setError('');
     setNotice('');
@@ -379,7 +357,7 @@ export function App() {
   const vehicleRoute = pathname.match(/^\/vehicles\/([0-9a-f-]+)$/i);
   const customerRoute = pathname === '/showroom' || pathname === '/account' || pathname === '/vehicles' || Boolean(vehicleRoute);
   const adminRoute = pathname === '/admin/dashboard' || pathname === '/admin/inventory';
-  const awaitingRoleRedirect = (customerRoute && (!session || isAdmin))
+  const awaitingRoleRedirect = (customerRoute && isAdmin) || (pathname === '/account' && !session)
     || (adminRoute && (!session || !isAdmin))
     || (pathname === '/login' && Boolean(session));
 
@@ -399,7 +377,7 @@ export function App() {
           <div className="stitch-auth-intro">
             <p className="eyebrow"><span className="eyebrow-line" /> APEX AUTO · PRECISION, IN FOCUS</p>
             <h1>Every great drive<br />starts with <span>the right key.</span></h1>
-            <p>Sign in to explore our current collection, check availability, and find the right car for you.</p>
+            <p>Sign in to request a vehicle, manage your orders, and keep your details up to date.</p>
             <ul className="stitch-auth-benefits">
               <li><ShieldCheck size={17} /> Secure account access</li>
               <li><Database size={17} /> Live inventory from the dealership</li>
@@ -463,20 +441,20 @@ export function App() {
           <footer className="public-footer landing-footer">
             <a className="landing-footer-brand" href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}>
               <span>APEX AUTO</span>
-              <small>PRECISION CRAFTED AUTOMOTIVE</small>
+              <small>FIND YOUR NEXT DRIVE</small>
             </a>
             <nav aria-label="Footer navigation">
               <a href="/showroom" onClick={(event) => {
                 event.preventDefault();
-                navigate(session ? (isAdmin ? '/admin/inventory' : '/showroom') : '/login');
+                navigate(isAdmin ? '/admin/inventory' : '/showroom');
               }}>Showroom</a>
-              <a href="/contact" onClick={(event) => { event.preventDefault(); navigate('/contact'); }}>Concierge</a>
+              <a href="/contact" onClick={(event) => { event.preventDefault(); navigate('/contact'); }}>Contact us</a>
             </nav>
             <span>© {new Date().getFullYear()} Apex Auto. All rights reserved.</span>
           </footer>
         ) : (
           <footer className="public-footer">
-            <span>VEHICLE DETAILS ARE SHOWN AS RECORDED IN THE CURRENT CATALOGUE.</span>
+            <span>Find your next drive with Apex Auto.</span>
             <span>© {new Date().getFullYear()} APEX AUTO</span>
           </footer>
         )}
@@ -503,44 +481,7 @@ export function App() {
   return (
     <div className={`apex-app ${isAdmin ? 'stitch-admin-app' : ''}`}>
       <a className="skip-link" href="#main-content">Skip to main content</a>
-      <header className="apex-header">
-        <a className="apex-brand" href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }} aria-label="Apex Auto home">
-          <span className="apex-brand-mark"><CarFront size={22} strokeWidth={1.8} /></span>
-          <span>APEX AUTO<small>INVENTORY, IN FOCUS</small></span>
-        </a>
-        <nav className="apex-desktop-nav" aria-label={isAdmin ? 'Administration' : 'Showroom'}>
-          {isAdmin ? (
-            <>
-              <a href="/admin/dashboard" onClick={(event) => { event.preventDefault(); navigate('/admin/dashboard'); }}><Activity size={15} /> Operations</a>
-              <a href="#inventory"><CarFront size={15} /> Inventory</a>
-              <a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}>Public site</a>
-            </>
-          ) : (
-            <>
-              <a href="#ai-finder"><Sparkles size={15} /> Finder</a>
-              <a href="#inventory"><CarFront size={15} /> Inventory</a>
-              <a href="/contact" onClick={(event) => { event.preventDefault(); navigate('/contact'); }}>Contact</a>
-              <a href="/account" onClick={(event) => { event.preventDefault(); navigate('/account'); }}>My account</a>
-            </>
-          )}
-        </nav>
-        <div className="apex-header-actions">
-          <span className={`api-health api-health-${apiStatus.state}`} role="status">
-            <span className="health-dot" />
-            {apiStatus.state === 'checking' ? 'CHECKING API' : apiStatus.state === 'online' ? 'API & DATABASE ONLINE' : 'API STATUS UNKNOWN'}
-          </span>
-          {session ? (
-            <>
-              <span className="apex-user"><UserRound size={15} /> {session.user.name.split(' ')[0]}</span>
-              <button className="apex-signout" type="button" onClick={signOut} aria-label="Sign out" title="Sign out">
-                <LogOut size={17} />
-              </button>
-            </>
-          ) : (
-            <a className="apex-signin" href="/login" onClick={(event) => { event.preventDefault(); navigate('/login'); }}>SIGN IN <ArrowUpRight size={15} /></a>
-          )}
-        </div>
-      </header>
+      <PublicHeader session={session} isAdmin={isAdmin} signOut={signOut} navigate={navigate} pathname={pathname} />
 
       <main className={`apex-main ${isAdmin ? 'stitch-admin-main' : ''}`} id="main-content" tabIndex="-1">
         {isAdmin ? (
@@ -550,29 +491,25 @@ export function App() {
             <p>Review live stock, update verified vehicle details, and control listing visibility.</p>
           </section>
         ) : (
-          <AICarFinder
-            session={session}
-            onPurchase={handlePurchase}
-            onUnauthorized={signOut}
-            apiStatus={apiStatus}
-          />
+          <section className="showroom-intro"><p className="eyebrow">THE APEX AUTO COLLECTION</p><h1>Your next car.<br /><span>Start exploring.</span></h1><p>Compare the details, find your fit, and talk to our team when you are ready.</p>
+          </section>
         )}
 
         <section className="collection-section" id="inventory">
           <div className="section-heading">
             <div>
-              <p className="eyebrow"><span className="eyebrow-line" /> LIVE DEALERSHIP INVENTORY</p>
-              <h2>{isAdmin ? <>Inventory <span>allocation.</span></> : <>Browse the <span>showroom.</span></>}</h2>
+              <p className="eyebrow"><span className="eyebrow-line" /> FIND YOUR FIT</p>
+              <h2>{isAdmin ? <>Vehicle <span>inventory.</span></> : <>Browse the <span>showroom.</span></>}</h2>
             </div>
-            {session && (
+            {(
               <div className="collection-meta">
                 <span className="inventory-count">{loading ? '…' : String(pagination.total).padStart(2, '0')}</span>
-                <span>{isAdmin ? 'TOTAL RECORDS' : 'CURATED VEHICLES'}</span>
+                <span>VEHICLES</span>
               </div>
             )}
           </div>
 
-          {session ? (
+          {(
             <>
               <div className="toolbar">
                 <div className={`filters-panel ${mobileFilters ? 'filters-open' : ''}`} id="inventory-filters">
@@ -642,7 +579,7 @@ export function App() {
               {notice && <div className="notice notice-success" role="status"><Check size={17} /> {notice}<button type="button" aria-label="Dismiss notification" onClick={() => setNotice('')}><X size={15} /></button></div>}
 
               {loading && !vehicles.length ? (
-                <div className="empty-state"><div className="loading-spinner" /><p>Curating your collection…</p></div>
+                <div className="empty-state"><div className="loading-spinner" /><p>Loading vehicles…</p></div>
               ) : vehicles.length ? (
                 <div className="vehicle-grid">
                   {vehicles.map((vehicle, index) => (
@@ -650,6 +587,7 @@ export function App() {
                       key={vehicle.id}
                       vehicle={vehicle}
                       index={index}
+                      onDetails={() => navigate(`/vehicles/${encodeURIComponent(vehicle.id)}`)}
                       isAdmin={isAdmin}
                       busy={busyId === vehicle.id}
                       onPurchase={handlePurchase}
@@ -714,63 +652,27 @@ export function App() {
               )}
               <p className="inventory-note"><LockKeyhole size={13} /> Availability reflects active reservations and confirmed purchases</p>
             </>
-          ) : (
-            <div className="account-section" id="account">
-              <div className="account-intro">
-                <div className="account-icon"><KeyRound size={20} /></div>
-                <p className="eyebrow"><span className="eyebrow-line" /> YOUR PRIVATE SHOWROOM</p>
-                <h3>A little closer<br />to <span>the right one.</span></h3>
-                <p>Sign in to browse the current inventory, check live stock, and purchase an available vehicle.</p>
-                <ul className="account-benefits">
-                  <li><Check size={15} /> Current vehicle listings</li>
-                  <li><Check size={15} /> Live stock availability</li>
-                  <li><Check size={15} /> Clear vehicle details</li>
-                </ul>
-              </div>
-              <AuthForm
-                mode={authMode}
-                setMode={setAuthMode}
-                navigate={navigate}
-                onAuthenticated={saveSession}
-                setError={setError}
-                error={error}
-                notice={notice}
-                setNotice={setNotice}
-              />
-            </div>
           )}
         </section>
 
+
+        {session && !isAdmin && (
+          <AICarFinder
+            session={session}
+            onPurchase={handlePurchase}
+            onUnauthorized={signOut}
+          />
+        )}
       </main>
 
       {checkoutVehicle && <VehicleCheckout vehicle={checkoutVehicle} user={session.user} api={api} navigate={navigate} onComplete={handleCheckoutComplete} />}
       <GlobalErrorToast notification={toastError} onDismiss={() => setToastError(null)} />
       <footer className="apex-footer">
-        <span>VEHICLE DETAILS ARE SHOWN AS RECORDED IN THE CURRENT CATALOGUE.</span>
+        <span>Find your next drive with Apex Auto.</span>
         <span>© {new Date().getFullYear()} APEX AUTO</span>
       </footer>
 
-      <nav className="apex-bottom-nav" aria-label="Showroom navigation">
-        {isAdmin ? (
-          <>
-            <a href="/admin/dashboard" onClick={(event) => { event.preventDefault(); navigate('/admin/dashboard'); }}><Activity size={18} /><span>Operations</span></a>
-            <a href="#inventory"><CarFront size={18} /><span>Inventory</span></a>
-            <a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}><CarFront size={18} /><span>Public site</span></a>
-          </>
-        ) : (
-          <>
-            <a href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}><CarFront size={18} /><span>Home</span></a>
-            <a href="#ai-finder"><Sparkles size={18} /><span>Finder</span></a>
-            <a href="#inventory"><CarFront size={18} /><span>Inventory</span></a>
-            <a href="/account" onClick={(event) => { event.preventDefault(); navigate('/account'); }}><UserRound size={18} /><span>Account</span></a>
-          </>
-        )}
-        {session ? (
-          <button type="button" onClick={signOut}><LogOut size={18} /><span>Sign out</span></button>
-        ) : (
-          <a href="#account"><UserRound size={18} /><span>Account</span></a>
-        )}
-      </nav>
+
 
       {editor && <VehicleEditor value={editor} setValue={setEditor} busy={busyId === 'editor'} onSubmit={saveVehicle} onClose={() => setEditor(null)} />}
     </div>

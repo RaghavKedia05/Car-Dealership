@@ -1,10 +1,10 @@
 import React, { useRef, useState } from 'react';
-import { Activity, ArrowUpRight, CarFront, ChevronDown, Database, LockKeyhole, Search, Share2, Sparkles, Terminal, X } from 'lucide-react';
+import { ArrowUpRight, CarFront, LockKeyhole, Share2, Sparkles, X } from "lucide-react";
 import { apiUrl, reportError, parseApiResponse } from '../../lib/api-client.js';
 import { money } from '../../lib/currency-format.js';
 import { useDialogAccessibility } from '../../hooks/useDialogAccessibility.js';
 
-export function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) {
+export function AICarFinder({ session, onPurchase, onUnauthorized }) {
   const [query, setQuery] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -13,8 +13,6 @@ export function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) 
   const [comparison, setComparison] = useState(null);
   const [comparing, setComparing] = useState(false);
   const [details, setDetails] = useState(null);
-  const [searchRequest, setSearchRequest] = useState(null);
-  const [compareRequest, setCompareRequest] = useState(null);
   const [shareNotice, setShareNotice] = useState('');
   const detailsDialogRef = useRef(null);
   useDialogAccessibility(detailsDialogRef, () => setDetails(null), Boolean(details));
@@ -44,7 +42,6 @@ export function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) 
     setShareNotice('');
     setComparison(null);
     setSelectedIds([]);
-    const startedAt = performance.now();
     try {
       const response = await fetch(apiUrl('/api/ai/car-finder'), {
         method: 'POST',
@@ -54,12 +51,10 @@ export function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) 
         },
         body: JSON.stringify({ query: cleanQuery }),
       });
-      setSearchRequest({ status: response.status, latency: Math.round(performance.now() - startedAt) });
       const body = await parseApiResponse(response, 'Car Finder could not complete this search.');
       setResult(body);
     } catch (failure) {
       if (failure.status === undefined) {
-        setSearchRequest({ status: 'network-error', latency: Math.round(performance.now() - startedAt) });
         reportError(failure);
       }
       setError(failure.message || 'Network error while searching the vehicle inventory.');
@@ -95,7 +90,6 @@ export function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) 
     if (selectedIds.length < 2) return;
     setComparing(true);
     setError('');
-    const startedAt = performance.now();
     try {
       const response = await fetch(apiUrl('/api/ai/car-finder/compare'), {
         method: 'POST',
@@ -105,7 +99,6 @@ export function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) 
         },
         body: JSON.stringify({ vehicle_ids: selectedIds, original_query: query }),
       });
-      setCompareRequest({ status: response.status, latency: Math.round(performance.now() - startedAt) });
       const body = await parseApiResponse(response, 'The selected vehicles could not be compared.');
       setComparison(body);
       window.requestAnimationFrame(() => {
@@ -113,7 +106,6 @@ export function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) 
       });
     } catch (failure) {
       if (failure.status === undefined) {
-        setCompareRequest({ status: 'network-error', latency: Math.round(performance.now() - startedAt) });
         reportError(failure);
       }
       setError(failure.message || 'Network error while comparing vehicles.');
@@ -137,10 +129,10 @@ export function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) 
     setShareNotice('');
     try {
       if (navigator.share) {
-        await navigator.share({ title, text, url: `${window.location.origin}/#inventory` });
+        await navigator.share({ title, text, url: `${window.location.origin}/vehicles/${encodeURIComponent(vehicle.id)}` });
         setShareNotice(`${title} shared.`);
       } else if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(`${text} — ${window.location.origin}/#inventory`);
+        await navigator.clipboard.writeText(`${text} — ${window.location.origin}/vehicles/${encodeURIComponent(vehicle.id)}`);
         setError('');
         setShareNotice('Vehicle details copied to the clipboard.');
       } else {
@@ -162,11 +154,6 @@ export function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) 
       .map((item) => `${item.vehicle.make} ${item.vehicle.model}`)
     : [];
 
-  function requestLabel(request) {
-    if (!request) return 'NOT CALLED';
-    if (request.status === 'network-error') return 'NETWORK ERROR';
-    return `HTTP ${request.status} · ${request.latency} MS`;
-  }
 
   function recommendationCard(item) {
     const vehicle = item.vehicle;
@@ -224,7 +211,7 @@ export function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) 
             disabled={vehicle.quantity < 1}
             onClick={() => purchaseRecommendation(vehicle)}
           >
-            {vehicle.quantity < 1 ? 'Sold out' : 'Purchase'}
+            {vehicle.quantity < 1 ? 'Sold out' : 'Request this car'}
           </button>
         </div>
         <label className="compare-select">
@@ -246,19 +233,9 @@ export function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) 
     <section className="finder-section" id="ai-finder">
       <div className="finder-topline">
         <div className="finder-heading">
-          <p className="eyebrow"><span className="eyebrow-line" /> NATURAL LANGUAGE · LIVE INVENTORY</p>
-          <h1>Find the car<br />that fits <span>your life.</span></h1>
+          <p className="eyebrow"><span className="eyebrow-line" /> NEED A HAND? · LIVE INVENTORY</p>
+          <h2>Let us help you <span>narrow it down.</span></h2>
           <p>Describe what matters. We’ll match your needs against vehicles currently in this showroom.</p>
-        </div>
-        <div className="finder-live-card" role="status">
-          <div className={`finder-live-icon ${apiStatus.state}`}><Database size={19} /></div>
-          <div>
-            <span>INVENTORY CONNECTION</span>
-            <strong>{apiStatus.state === 'online' ? 'Database verified' : apiStatus.state === 'checking' ? 'Checking connection' : 'Connection unavailable'}</strong>
-            <small>{apiStatus.state === 'online' && apiStatus.latency !== null
-              ? `Health check · ${apiStatus.latency} ms`
-              : apiStatus.state === 'checking' ? 'Verifying API and database' : 'Search and inventory may be unavailable'}</small>
-          </div>
         </div>
       </div>
       <div className="finder-search">
@@ -302,22 +279,14 @@ export function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) 
         ))}
       </div>
 
-      <details className="api-verification">
-        <summary><Terminal size={15} /> API &amp; DATA VERIFICATION <ChevronDown size={15} /></summary>
-        <div className="verification-grid">
-          <div><span><Database size={14} /> API / DATABASE HEALTH</span><strong>{apiStatus.state === 'online' ? `VERIFIED${apiStatus.latency === null ? '' : ` · ${apiStatus.latency} MS`}` : apiStatus.state === 'checking' ? 'CHECKING' : 'UNAVAILABLE'}</strong></div>
-          <div><span><Activity size={14} /> INVENTORY SEARCH</span><strong>{requestLabel(searchRequest)}</strong></div>
-          <div><span><Activity size={14} /> VEHICLE COMPARISON</span><strong>{requestLabel(compareRequest)}</strong></div>
-          <p>Health is verified from the live API. Request timings and HTTP status are measured in this browser; vehicle fields marked “Not recorded” are not present in the catalogue.</p>
-        </div>
-      </details>
+
 
       {result && (
         <div className="finder-results" aria-live="polite">
           {result.warning && <div className="finder-provider-warning" role="status">{result.warning}</div>}
           <div className="finder-result-summary">
             <div>
-              <p className="eyebrow"><span className="eyebrow-line" /> INTERPRETATION · {result.parser === 'provider' ? 'AI-ASSISTED' : 'BUILT-IN PARSER'}</p>
+              <p className="eyebrow"><span className="eyebrow-line" /> YOUR MATCHES</p>
               <h3>{result.summary}</h3>
             </div>
           </div>
@@ -327,7 +296,7 @@ export function AICarFinder({ session, onPurchase, onUnauthorized, apiStatus }) 
             <>
               {result.criteria?.mustHave?.length > 0 && (
                 <div className="finder-criteria">
-                  <span>HARD REQUIREMENTS</span>
+                  <span>YOUR PREFERENCES</span>
                   {result.criteria.mustHave.map((criterion) => <span className="finder-criterion" key={criterion}>{criterion}</span>)}
                   {result.criteria.preferences?.map((preference) => (
                     <span className="finder-preference" key={preference}>Priority: {preference.replaceAll('_', ' ')}</span>

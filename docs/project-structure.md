@@ -20,20 +20,19 @@ Car_Dealership/
       public/                  Landing, vehicle details, and contact pages
     hooks/                     Shared dialog accessibility hook
     lib/                       API, session, currency, and category helpers
-    styles/                    Global responsive stylesheet
+    styles/                    Base layouts and dealership theme
   backend/                     Express API (CommonJS)
     server.js                  Configuration, startup, cleanup, shutdown
     app.js                     Routes, authentication, validation, middleware
     seed-admin.js              Admin provisioning helper and CLI
     services/                  AI finder and order reservation logic
     database/
-      database-adapters.js     SQLite/PostgreSQL adapters and migration runner
+      postgres-database.js     PostgreSQL adapter and migration runner
       postgres-schema.sql      PostgreSQL baseline schema
       migrations/
-        sqlite/                Ordered SQLite upgrades
         postgres/              Ordered PostgreSQL upgrades
   tests/                       Node test runner API and database suites
-  scripts/                     Database import and HTTP load-test utilities
+  scripts/                     Database migrations and HTTP load-check utilities
   docs/                        Project documentation
     images/                    Recorded application screenshots
     history/                   Historical development prompts
@@ -41,7 +40,7 @@ Car_Dealership/
     references/                HTML mockups, screenshots, brand guidelines
     archives/                  Original frontend export ZIP
   .github/workflows/           CI, image validation, and container publishing
-  data/                        Generated local SQLite database (gitignored)
+  data/                        Ignored legacy local files; no longer used by the app
   dist/                        Generated frontend build (gitignored)
   node_modules/                Installed dependencies (gitignored)
 ```
@@ -58,10 +57,10 @@ Car_Dealership/
 | Change vehicle editing | [VehicleEditor.jsx](../src/features/inventory/VehicleEditor.jsx) |
 | Change checkout | [VehicleCheckout.jsx](../src/features/checkout/VehicleCheckout.jsx), [reservation service](../backend/services/order-reservations.js), and API routes |
 | Change AI recommendations | [AICarFinder.jsx](../src/features/ai-car-finder/AICarFinder.jsx) and [AI service](../backend/services/ai-car-finder.js) |
-| Change layout, colors, or responsive behavior | [dealership.css](../src/styles/dealership.css) |
+| Change layout, colors, or responsive behavior | [showroom-theme.css](../src/styles/showroom-theme.css) for the shared theme; [dealership.css](../src/styles/dealership.css) for feature layouts |
 | Change request handling or authorization | [backend/app.js](../backend/app.js), [API reference](api.md), and [OpenAPI](openapi.yaml) |
-| Change persistence/schema | [database-adapters.js](../backend/database/database-adapters.js) and the database-specific migration folders |
-| Import SQLite into PostgreSQL | [migrate-sqlite-to-postgres.js](../scripts/migrate-sqlite-to-postgres.js), via `npm run db:import:postgres` |
+| Change persistence/schema | [postgres-database.js](../backend/database/postgres-database.js) and the database-specific migration folders |
+| Apply PostgreSQL migrations | [migrate-postgres.js](../scripts/migrate-postgres.js), via `npm run db:migrate` |
 | Run HTTP load checks | [http-load-check.js](../scripts/http-load-check.js), via `npm run stress` |
 | Change build/deployment | Root `vite.config.js`, `Dockerfile`, `compose.yaml`, `vercel.json`, and `.github/workflows/ci-cd.yml` |
 
@@ -75,9 +74,9 @@ During development, Vite forwards `/api` and `/healthz` to `backend/server.js`. 
 
 - React components use PascalCase filenames matching their exported component. Related small private widgets may stay beside their parent in the same file.
 - Backend services and utilities use descriptive kebab-case filenames. Runtime entry points retain the conventional `app.js` and `server.js` names.
-- SQL migration numbers and filenames remain unchanged. SQLite and PostgreSQL have separate histories; the PostgreSQL baseline is version 1.
+- SQL migration numbers and filenames remain unchanged. The PostgreSQL baseline is version 1; existing applied versions remain compatible.
 - Root configuration filenames remain conventional so npm, Vite, Docker, Vercel, and GitHub Actions can discover them.
-- `data/` is runtime state, not source. `dist/` and `node_modules/` are generated. Do not edit these to change the application.
+- `data/` may contain legacy local files; PostgreSQL is the only active data store. `dist/` and `node_modules/` are generated. Do not edit these to change the application.
 - `design/` and `docs/history/` are reference material. Their historical instructions and examples do not describe the current implementation.
 
 ## Previous locations
@@ -86,8 +85,8 @@ During development, Vite forwards `/api` and `/healthz` to `backend/server.js`. 
 | --- | --- |
 | `src/dealership-app.jsx` | `src/main.jsx`, `src/App.jsx`, feature components, hooks, and helpers |
 | `src/dealership-ui.css` | `src/styles/dealership.css` |
-| `backend/database.js` | `backend/database/database-adapters.js` |
-| `backend/migrations/` | `backend/database/migrations/sqlite/` |
+| `backend/database.js` | `backend/database/postgres-database.js` |
+
 | `backend/postgres-migrations/` | `backend/database/migrations/postgres/` |
 | `backend/postgres-schema.sql` | `backend/database/postgres-schema.sql` |
 | `backend/ai-car-finder.js`, `backend/order-reservations.js` | `backend/services/` |

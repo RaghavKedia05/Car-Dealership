@@ -291,6 +291,7 @@ function createApp({
   authRateLimit = {},
   aiParser,
   aiRateLimit = {},
+  registrationEmailSender = sendRegistrationCodeEmail,
 } = {}) {
   if (!db) throw new Error('A database connection is required');
   if (!jwtSecret) throw new Error('JWT_SECRET must be configured');
@@ -466,7 +467,7 @@ function createApp({
   app.post('/api/auth/register', authLimiter, async (req, res) => {
     const input = validate(registrationSchema, req.body, res);
     if (!input) return;
-    if (!process.env.RESEND_API_KEY || !process.env.PASSWORD_RESET_FROM) {
+    if (registrationEmailSender === sendRegistrationCodeEmail && (!process.env.RESEND_API_KEY || !process.env.PASSWORD_RESET_FROM)) {
       return res.status(503).json({ error: 'Email verification is not configured yet. Please contact the dealership.' });
     }
     if (await db.get('SELECT 1 FROM users WHERE LOWER(email) = LOWER(?)', input.email)) {
@@ -502,7 +503,7 @@ function createApp({
     }
 
     try {
-      await sendRegistrationCodeEmail(input.email, code);
+      await registrationEmailSender(input.email, code);
     } catch (error) {
       await db.run('DELETE FROM registration_verifications WHERE id = ? AND code_hash = ?', challenge.id, codeHash);
       console.error('Could not send registration verification code:', error.message);

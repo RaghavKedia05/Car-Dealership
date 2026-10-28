@@ -1,32 +1,15 @@
+const { createTestDatabase, createTestApp, registerAccount } = require('./helpers/postgres');
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const request = require('supertest');
-const { PGlite } = require('@electric-sql/pglite');
-const { createApp } = require('../backend/app');
-const { createPostgresDatabase } = require('../backend/database/database-adapters');
+
+
+
 
 async function createPostgresContext() {
-  const engine = new PGlite();
-  const runQuery = async (sql, values) => {
-    if (!values.length && sql.includes(';')) {
-      await engine.exec(sql);
-      return { rows: [], rowCount: 0 };
-    }
-    return engine.query(sql, values);
-  };
-  const pool = {
-    query: (sql, values = []) => runQuery(sql, values),
-    async connect() {
-      return {
-        query: (sql, values = []) => runQuery(sql, values),
-        release() {},
-      };
-    },
-    end: () => engine.close(),
-  };
-  const db = await createPostgresDatabase({ pool }).migrate();
-  const app = createApp({ db, jwtSecret: 'test-secret-that-is-long-enough' });
-  return { app, db, close: () => db.close() };
+ const db = await createTestDatabase();
+ const app = createTestApp({ db, jwtSecret: 'test-secret-that-is-long-enough' });
+ return { app, db, close: () => db.close() };
 }
 
 function withToken(token) {
@@ -38,14 +21,14 @@ test('PostgreSQL migrations and core dealership API routes work', async (t) => {
   t.after(close);
 
   await db.migrate();
-  assert.equal(Number((await db.get('SELECT version FROM app_schema_migrations')).version), 1);
+  assert.equal(Number((await db.get('SELECT MAX(version) AS version FROM app_schema_migrations')).version), 6);
   assert.equal((await request(app).get('/healthz')).status, 200);
 
-  const adminRegistration = await request(app).post('/api/auth/register').send({
+  const adminRegistration = await registerAccount(app, {
     name: 'Morgan Admin',
     email: 'ADMIN@example.com',
     password: 'correct-horse-battery',
-  }).expect(201);
+  }, 201);
   const adminId = adminRegistration.body.user.id;
   await db.run('UPDATE users SET role = ? WHERE id = ?', 'admin', adminId);
   await db.run('UPDATE users SET email = ? WHERE id = ?', 'ADMIN@example.com', adminId);
@@ -53,21 +36,21 @@ test('PostgreSQL migrations and core dealership API routes work', async (t) => {
     email: 'admin@example.com',
     password: 'correct-horse-battery',
   }).expect(200);
-  const userRegistration = await request(app).post('/api/auth/register').send({
+  const userRegistration = await registerAccount(app, {
     name: 'Taylor Driver',
     email: 'taylor@example.com',
     password: 'correct-horse-battery',
-  }).expect(201);
+  }, 201);
   const userLogin = await request(app).post('/api/auth/login').send({
     email: 'taylor@example.com',
     password: 'correct-horse-battery',
   }).expect(200);
 
-  await request(app).post('/api/auth/register').send({
+  await registerAccount(app, {
     name: 'Duplicate Admin',
     email: 'admin@example.com',
     password: 'correct-horse-battery',
-  }).expect(409);
+  }, 409);
 
   const created = await request(app).post('/api/vehicles')
     .set(withToken(adminLogin.body.token))
@@ -110,9 +93,9 @@ test('PostgreSQL migrations and core dealership API routes work', async (t) => {
     .expect(200);
   assert.equal(comparison.body.vehicles.length, 2);
 
-  await request(app).post(`/api/vehicles/${vehicleId}/purchase`)
-    .set(withToken(userLogin.body.token))
-    .expect(200);
+  const checkout = await request(app).post(`/api/vehicles/${vehicleId}/checkout`)
+    .set(withToken(userLogin.body.token)).send({ customerName: 'Taylor Driver', email: 'taylor@example.com', phone: '9876543210', deliveryAddress: '123 Test Street, Delhi', paymentMethod: 'dealership' }).expect(201);
+  await request(app).patch(`/api/admin/orders/${checkout.body.order.id}`).set(withToken(adminLogin.body.token)).send({ status: 'paid' }).expect(200);
   const savedVehicle = await db.get('SELECT quantity FROM vehicles WHERE id = ?', vehicleId);
   const savedPurchase = await db.get('SELECT unit_price, total_amount FROM purchases WHERE vehicle_id = ?', vehicleId);
   assert.equal(savedVehicle.quantity, 1);

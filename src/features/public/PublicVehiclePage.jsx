@@ -20,7 +20,7 @@ export function PublicVehiclePage({ api, vehicleId, navigate }) {
   }, [api, vehicleId]);
 
   if (loading) return <div className="empty-state"><div className="loading-spinner" /><p>Loading vehicle details…</p></div>;
-  if (error || !vehicle) return <section className="public-not-found"><p className="eyebrow"><span className="eyebrow-line" /> LISTING UNAVAILABLE</p><h1>We couldn’t find <span>that vehicle.</span></h1><p>{error || 'This vehicle may have been removed from the public catalogue.'}</p><button className="public-button" type="button" onClick={() => navigate('/')}>Back to collection <ArrowUpRight size={16} /></button></section>;
+  if (error || !vehicle) return <section className="public-not-found"><p className="eyebrow"><span className="eyebrow-line" /> LISTING UNAVAILABLE</p><h1>We couldn’t find <span>that vehicle.</span></h1><p>{error || 'This vehicle may have been removed from the public catalogue.'}</p><button className="public-button" type="button" onClick={() => navigate('/showroom')}>Back to collection <ArrowUpRight size={16} /></button></section>;
 
   const details = [
     ['Year', vehicle.year], ['Variant', vehicle.variant], ['Category', vehicle.category],
@@ -33,7 +33,7 @@ export function PublicVehiclePage({ api, vehicleId, navigate }) {
 
   return (
     <article className="public-vehicle-detail">
-      <button className="public-back-link" type="button" onClick={() => navigate('/')}>← Back to the collection</button>
+      <button className="public-back-link" type="button" onClick={() => navigate('/showroom')}>← Back to the collection</button>
       <div className="public-detail-layout">
         <div className="public-detail-image">
           {vehicle.imageUrl ? <img src={vehicle.imageUrl} alt={`${vehicle.make} ${vehicle.model}`} />
@@ -50,7 +50,7 @@ export function PublicVehiclePage({ api, vehicleId, navigate }) {
           <p className="public-detail-disclaimer">Availability and specifications reflect the catalogue and may change. Confirm details with the dealership.</p>
         </div>
       </div>
-      {details.length > 0 && <section className="public-specifications"><h2>Recorded specifications</h2><dl>{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></section>}
+      {details.length > 0 && <section className="public-specifications"><h2>Vehicle specifications</h2><dl>{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></section>}
       {vehicle.safetyFeatures && <p className="public-safety-note"><strong>Safety features:</strong> {vehicle.safetyFeatures}</p>}
     </article>
   );

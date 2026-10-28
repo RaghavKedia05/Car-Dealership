@@ -13,16 +13,13 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 FROM node:22-alpine AS runtime
 ENV NODE_ENV=production \
-    PORT=3001 \
-    DATABASE_PATH=/app/data/dealership.db
+    PORT=3001
 WORKDIR /app
 COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node package.json ./package.json
 COPY --chown=node:node backend ./backend
 COPY --from=build --chown=node:node /app/dist ./dist
 RUN apk upgrade --no-cache \
-    && mkdir -p /app/data \
-    && chown node:node /app/data \
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 USER node
 EXPOSE 3001

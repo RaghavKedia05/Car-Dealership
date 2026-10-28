@@ -1,7 +1,7 @@
 const { randomUUID } = require('node:crypto');
 const bcrypt = require('bcryptjs');
 const { z } = require('zod');
-const { createDatabase, createPostgresDatabase } = require('./database/database-adapters');
+const { createPostgresDatabase } = require('./database/postgres-database');
 
 const adminSchema = z.object({
   email: z.string().trim().email().max(254).transform((email) => email.toLowerCase()),
@@ -43,10 +43,8 @@ async function seedAdmin(db, credentials = process.env) {
 async function main() {
   let db;
   try {
-    db = process.env.DATABASE_URL
-      ? createPostgresDatabase()
-      : createDatabase(process.env.DATABASE_PATH);
-    if (process.env.DATABASE_URL) await db.migrate();
+    db = createPostgresDatabase();
+    await db.migrate();
     console.log(await seedAdmin(db));
   } finally {
     if (db) await db.close();

@@ -9,7 +9,7 @@ npm.cmd run build
 npm.cmd audit --audit-level=high
 ```
 
-`tests/api-endpoints.test.js` and `tests/ai-car-finder.test.js` use isolated SQLite databases. `tests/postgres-integration.test.js` runs core API scenarios on PostgreSQL through PGlite, an embedded PostgreSQL engine. Coverage is reported by Node's experimental built-in coverage option.
+All database tests use PostgreSQL. Locally, PGlite runs an isolated embedded PostgreSQL database per test. In CI, `TEST_DATABASE_URL` selects a real PostgreSQL service; each test gets a separate schema, which is dropped on cleanup. Set this variable only to a disposable test database with schema creation permissions. Registration fixtures capture verification emails in memory and complete the real OTP verification endpoint. `tests/postgres-migrations.test.js` covers initialization, upgrades, idempotency, version rejection, and rollback. Coverage is reported by Node's experimental built-in coverage option.
 
 ## Latest recorded verification
 

@@ -1,6 +1,7 @@
 services:
   dealership:
     image: ghcr.io/raghavkedia05/car-dealership:latest
+    build: .
     restart: unless-stopped
     init: true
     read_only: true
@@ -15,8 +16,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3001"
-      DATABASE_PATH: /app/data/dealership.db
-      DATABASE_URL: "${DATABASE_URL:-}"
+      DATABASE_URL: "${DATABASE_URL:?Set DATABASE_URL to your PostgreSQL connection string}"
       DATABASE_POOL_MAX: "${DATABASE_POOL_MAX:-5}"
       CORS_ORIGINS: "${CORS_ORIGINS:-}"
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
@@ -25,8 +25,6 @@ services:
       AI_API_KEY: "${AI_API_KEY:-}"
       AI_MODEL: "${AI_MODEL:-}"
       AI_BASE_URL: "${AI_BASE_URL:-}"
-    volumes:
-      - dealership-data:/app/data
     healthcheck:
       test:
         - CMD
@@ -38,5 +36,3 @@ services:
       retries: 3
       start_period: 10s
 
-volumes:
-  dealership-data:

@@ -12,6 +12,22 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: dealership_ci
+          POSTGRES_USER: dealership_ci
+          POSTGRES_PASSWORD: ci-only-postgres-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dealership_ci -d dealership_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://dealership_ci:ci-only-postgres-password@localhost:5432/dealership_ci
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -57,12 +73,12 @@ jobs:
           docker run --detach --rm --name dealership-ci \
             --publish 127.0.0.1:3001:3001 \
             --env JWT_SECRET="$JWT_SECRET" \
-            --volume dealership-ci-data:/app/data \
+            --add-host host.docker.internal:host-gateway \
+            --env DATABASE_URL="postgresql://dealership_ci:ci-only-postgres-password@host.docker.internal:5432/dealership_ci" \
             car-dealership:ci
           cleanup() {
             docker logs dealership-ci || true
             docker stop dealership-ci || true
-            docker volume rm dealership-ci-data || true
           }
           trap cleanup EXIT
           for attempt in $(seq 1 30); do

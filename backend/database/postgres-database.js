@@ -1,78 +1,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { DatabaseSync } = require('node:sqlite');
 
-const migrationDirectory = path.join(__dirname, 'migrations', 'sqlite');
 const postgresMigration = path.join(__dirname, 'postgres-schema.sql');
 const postgresCheckoutMigration = path.join(__dirname, 'migrations', 'postgres', '002_checkout_orders.sql');
 const postgresAccountMigration = path.join(__dirname, 'migrations', 'postgres', '003_customer_accounts.sql');
 const postgresPurchaseLinkMigration = path.join(__dirname, 'migrations', 'postgres', '004_purchase_checkout_link.sql');
 const postgresRegistrationMigration = path.join(__dirname, 'migrations', 'postgres', '005_registration_verifications.sql');
 const postgresOfflinePaymentMigration = path.join(__dirname, 'migrations', 'postgres', '006_offline_payment_method.sql');
-const migrations = [
-  '001_initial_schema.sql',
-  '002_purchase_records.sql',
-  '003_vehicle_specifications.sql',
-  '004_convert_usd_prices_to_inr.sql',
-  '005_public_catalog_enquiries.sql',
-  '006_checkout_orders.sql',
-  '007_customer_accounts.sql',
-  '008_purchase_checkout_link.sql',
-  '009_registration_verifications.sql',
-  '010_offline_payment_method.sql',
-];
-
-function migrate(db) {
-  const currentVersion = db.prepare('PRAGMA user_version').get().user_version;
-  if (currentVersion > migrations.length) {
-    throw new Error(`Database schema version ${currentVersion} is newer than this application supports`);
-  }
-
-  for (let index = currentVersion; index < migrations.length; index += 1) {
-    const version = index + 1;
-    const sql = fs.readFileSync(path.join(migrationDirectory, migrations[index]), 'utf8');
-    db.exec('BEGIN IMMEDIATE');
-    try {
-      db.exec(sql);
-      db.exec(`PRAGMA user_version = ${version}`);
-      db.exec('COMMIT');
-    } catch (error) {
-      db.exec('ROLLBACK');
-      throw error;
-    }
-  }
-}
-
-function createDatabase(filename = path.join(__dirname, '..', '..', 'data', 'dealership.db')) {
-  if (filename !== ':memory:' && !filename.startsWith('file:')) {
-    fs.mkdirSync(path.dirname(path.resolve(filename)), { recursive: true });
-  }
-
-  const db = new DatabaseSync(filename);
-  try {
-    db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
-    migrate(db);
-    db.get = async (sql, ...values) => db.prepare(sql).get(...values);
-    db.all = async (sql, ...values) => db.prepare(sql).all(...values);
-    db.run = async (sql, ...values) => db.prepare(sql).run(...values);
-    db.transaction = async (callback) => {
-      db.exec('BEGIN IMMEDIATE');
-      try {
-        const result = await callback(db);
-        db.exec('COMMIT');
-        return result;
-      } catch (error) {
-        db.exec('ROLLBACK');
-        throw error;
-      }
-    };
-    return db;
-  } catch (error) {
-    db.close();
-    throw error;
-  }
-}
-
 function postgresPlaceholders(sql) {
   let parameter = 0;
   return sql.replace(/\?/g, () => `$${++parameter}`);
@@ -181,4 +115,4 @@ function createPostgresDatabase({ connectionString = process.env.DATABASE_URL, p
   return db;
 }
 
-module.exports = { createDatabase, createPostgresDatabase };
+module.exports = { createPostgresDatabase };

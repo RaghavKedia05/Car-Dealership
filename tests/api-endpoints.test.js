@@ -1,33 +1,32 @@
+const checkoutDetails = { customerName: 'Taylor Driver', email: 'taylor@example.com', phone: '9876543210', deliveryAddress: '123 Test Street, Delhi', paymentMethod: 'dealership' };
+const { createTestDatabase, createTestApp, registerAccount } = require('./helpers/postgres');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
-const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
-const { DatabaseSync } = require('node:sqlite');
 const test = require('node:test');
 const request = require('supertest');
-const { createApp } = require('../backend/app');
-const { createDatabase } = require('../backend/database/database-adapters');
+
+
 
 async function createTestContext() {
-  const db = createDatabase(':memory:');
-  const app = createApp({ db, jwtSecret: 'test-secret-that-is-long-enough' });
+  const db = await createTestDatabase();
+  const app = createTestApp({ db, jwtSecret: 'test-secret-that-is-long-enough' });
 
-  const adminRegistration = await request(app).post('/api/auth/register').send({
+  const adminRegistration = await registerAccount(app, {
     name: 'Morgan Admin',
     email: 'admin@example.com',
     password: 'correct-horse-battery',
   });
   assert.equal(adminRegistration.status, 201);
 
-  const adminId = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@example.com').id;
-  db.prepare('UPDATE users SET role = ? WHERE id = ?').run('admin', adminId);
+  const adminId = (await db.get('SELECT id FROM users WHERE email = ?', 'admin@example.com')).id;
+  (await db.run('UPDATE users SET role = ? WHERE id = ?', 'admin', adminId));
   const adminLogin = await request(app).post('/api/auth/login').send({
     email: 'admin@example.com',
     password: 'correct-horse-battery',
   });
 
-  const userRegistration = await request(app).post('/api/auth/register').send({
+  const userRegistration = await registerAccount(app, {
     name: 'Taylor Driver',
     email: 'taylor@example.com',
     password: 'correct-horse-battery',
@@ -43,7 +42,7 @@ async function createTestContext() {
     adminToken: adminLogin.body.token,
     userToken: userLogin.body.token,
     close() {
-      db.close();
+      return db.close();
     },
   };
 }
@@ -71,7 +70,7 @@ test('registration stores a password hash and login issues a token', async (t) =
   const { app, db, close } = await createTestContext();
   t.after(close);
 
-  const stored = db.prepare('SELECT password_hash FROM users WHERE email = ?').get('taylor@example.com');
+  const stored = (await db.get('SELECT password_hash FROM users WHERE email = ?', 'taylor@example.com'));
   assert.notEqual(stored.password_hash, 'correct-horse-battery');
 
   const response = await request(app).post('/api/auth/login').send({
@@ -123,7 +122,7 @@ test('public catalogue exposes only listed vehicles and supports real filters', 
   assert.equal(hiddenDetail.status, 404);
 });
 
-test('customer inventory and purchase endpoints hide unlisted vehicles', async (t) => {
+test('customer inventory and checkout endpoints hide unlisted vehicles', async (t) => {
   const { app, adminToken, userToken, close } = await createTestContext();
   t.after(close);
   const listed = await addVehicle(app, adminToken, vehicle({ make: 'Visible' }));
@@ -133,10 +132,10 @@ test('customer inventory and purchase endpoints hide unlisted vehicles', async (
   const adminList = await request(app).get('/api/vehicles/search').set(withToken(adminToken)).expect(200);
   const customerDetail = await request(app).get(`/api/vehicles/${hidden.body.vehicle.id}`)
     .set(withToken(userToken)).expect(404);
-  const hiddenPurchase = await request(app).post(`/api/vehicles/${hidden.body.vehicle.id}/purchase`)
-    .set(withToken(userToken)).expect(404);
-  const listedPurchase = await request(app).post(`/api/vehicles/${listed.body.vehicle.id}/purchase`)
-    .set(withToken(userToken)).expect(200);
+  const hiddenPurchase = await request(app).post(`/api/vehicles/${hidden.body.vehicle.id}/checkout`)
+    .set(withToken(userToken)).send(checkoutDetails).expect(409);
+  const listedPurchase = await request(app).post(`/api/vehicles/${listed.body.vehicle.id}/checkout`)
+    .set(withToken(userToken)).send(checkoutDetails).expect(201);
   const hiddenComparison = await request(app).post('/api/ai/car-finder/compare')
     .set(withToken(userToken))
     .send({ vehicle_ids: [listed.body.vehicle.id, hidden.body.vehicle.id] })
@@ -145,7 +144,7 @@ test('customer inventory and purchase endpoints hide unlisted vehicles', async (
   assert.deepEqual(customerList.body.vehicles.map(({ make }) => make), ['Visible']);
   assert.equal(adminList.body.vehicles.length, 2);
   assert.equal(customerDetail.status, 404);
-  assert.equal(hiddenPurchase.status, 404);
+  assert.equal(hiddenPurchase.status, 409);
   assert.equal(listedPurchase.body.vehicle.quantity, 2);
   assert.equal(hiddenComparison.body.error, 'One or more selected vehicles were not found');
 });
@@ -178,7 +177,7 @@ test('guest and signed-in enquiries are validated, deduplicated, and visible onl
   assert.equal(userRead.status, 403);
   assert.equal(adminList.body.enquiries.length, 1);
   assert.equal(adminList.body.enquiries[0].vehicle.make, 'Volvo');
-  assert.equal(db.prepare('SELECT user_id FROM enquiries WHERE id = ?').get(guest.body.id).user_id, null);
+  assert.equal((await db.get('SELECT user_id FROM enquiries WHERE id = ?', guest.body.id)).user_id, null);
   assert.equal(adminDashboard.body.enquiries.total, 1);
   assert.equal(adminDashboard.body.enquiries.pending, 1);
 
@@ -198,15 +197,15 @@ test('guest and signed-in enquiries are validated, deduplicated, and visible onl
     ...payload,
     submissionKey: '857dd7a8-49de-47ba-a2f2-0fd50d19cfe9',
   }).expect(201);
-  const userId = db.prepare('SELECT id FROM users WHERE email = ?').get('taylor@example.com').id;
-  assert.equal(db.prepare('SELECT user_id FROM enquiries WHERE id = ?').get(signedIn.body.id).user_id, userId);
+  const userId = (await db.get('SELECT id FROM users WHERE email = ?', 'taylor@example.com')).id;
+  assert.equal((await db.get('SELECT user_id FROM enquiries WHERE id = ?', signedIn.body.id)).user_id, userId);
 });
 
 test('disabled accounts can no longer use an already-issued access token', async (t) => {
   const { app, db, userToken, close } = await createTestContext();
   t.after(close);
-  const userId = db.prepare('SELECT id FROM users WHERE email = ?').get('taylor@example.com').id;
-  db.prepare("UPDATE users SET status = 'disabled' WHERE id = ?").run(userId);
+  const userId = (await db.get('SELECT id FROM users WHERE email = ?', 'taylor@example.com')).id;
+  (await db.run("UPDATE users SET status = 'disabled' WHERE id = ?", userId));
 
   const profile = await request(app).get('/api/auth/me').set(withToken(userToken)).expect(401);
   const enquiry = await request(app).post('/api/enquiries').set(withToken(userToken)).send({
@@ -224,12 +223,12 @@ test('registration rejects duplicate emails and malformed input', async (t) => {
   const { app, close } = await createTestContext();
   t.after(close);
 
-  const duplicate = await request(app).post('/api/auth/register').send({
+  const duplicate = await registerAccount(app, {
     name: 'Another Taylor',
     email: 'TAYLOR@example.com',
     password: 'another-valid-password',
   });
-  const invalid = await request(app).post('/api/auth/register').send({
+  const invalid = await registerAccount(app, {
     name: 'No Email',
     email: 'not-an-email',
     password: 'short',
@@ -251,7 +250,7 @@ test('login rejects incorrect credentials and registration cannot grant administ
     email: 'missing@example.com',
     password: 'incorrect-password',
   });
-  const attemptedPromotion = await request(app).post('/api/auth/register').send({
+  const attemptedPromotion = await registerAccount(app, {
     name: 'Rogue Admin',
     email: 'rogue@example.com',
     password: 'correct-horse-battery',
@@ -262,7 +261,7 @@ test('login rejects incorrect credentials and registration cannot grant administ
   assert.equal(missingAccount.status, 401);
   assert.equal(attemptedPromotion.status, 201);
   assert.equal(
-    db.prepare('SELECT role FROM users WHERE email = ?').get('rogue@example.com').role,
+    (await db.get('SELECT role FROM users WHERE email = ?', 'rogue@example.com')).role,
     'user',
   );
 });
@@ -292,8 +291,8 @@ test('health endpoint exposes readiness and security headers', async (t) => {
 });
 
 test('CORS allows configured frontend origins and rejects other preflight origins', async (t) => {
-  const db = createDatabase(':memory:');
-  const app = createApp({
+  const db = await createTestDatabase();
+  const app = createTestApp({
     db,
     jwtSecret: 'test-secret-that-is-long-enough',
     corsOrigins: ['https://car-dealership-sand.vercel.app'],
@@ -323,8 +322,8 @@ test('CORS allows configured frontend origins and rejects other preflight origin
 });
 
 test('authentication endpoints limit repeated requests', async (t) => {
-  const db = createDatabase(':memory:');
-  const app = createApp({
+  const db = await createTestDatabase();
+  const app = createTestApp({
     db,
     jwtSecret: 'test-secret-that-is-long-enough',
     authRateLimit: { limit: 2, windowMs: 60_000 },
@@ -353,7 +352,6 @@ test('production server rejects missing or short JWT secrets', () => {
         JWT_SECRET: jwtSecret,
         DATABASE_URL: '',
         PORT: '3001',
-        DATABASE_PATH: ':memory:',
       },
       timeout: 5000,
     });
@@ -476,17 +474,17 @@ test('vehicle listing supports validated sorting and pagination', async (t) => {
   assert.equal(invalidPage.status, 400);
 });
 
-test('purchasing decrements available quantity and prevents overselling', async (t) => {
+test('checkout decrements available quantity and prevents overselling', async (t) => {
   const { app, adminToken, userToken, close } = await createTestContext();
   t.after(close);
 
   const created = await addVehicle(app, adminToken, vehicle({ quantity: 1 }));
-  const url = `/api/vehicles/${created.body.vehicle.id}/purchase`;
+  const url = `/api/vehicles/${created.body.vehicle.id}/checkout`;
 
-  const purchased = await request(app).post(url).set(withToken(userToken)).send();
-  const soldOut = await request(app).post(url).set(withToken(userToken)).send();
+  const purchased = await request(app).post(url).set(withToken(userToken)).send(checkoutDetails);
+  const soldOut = await request(app).post(url).set(withToken(userToken)).send(checkoutDetails);
 
-  assert.equal(purchased.status, 200);
+  assert.equal(purchased.status, 201);
   assert.equal(purchased.body.vehicle.quantity, 0);
   assert.equal(soldOut.status, 409);
 });
@@ -508,115 +506,6 @@ test('only admins can restock vehicles and invalid quantities are rejected', asy
   assert.equal(restocked.body.vehicle.quantity, 5);
 });
 
-test('vehicle inventory persists in a file-backed SQLite database', (t) => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dealership-db-'));
-  const filename = path.join(directory, 'inventory.sqlite');
-  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
-
-  const firstConnection = createDatabase(filename);
-  firstConnection.prepare(`
-    INSERT INTO vehicles (id, make, model, category, price, quantity)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run('persistent-test-id', 'Volvo', 'XC60', 'SUV', 42000, 3);
-  firstConnection.close();
-
-  const secondConnection = createDatabase(filename);
-  const saved = secondConnection.prepare('SELECT make, model, quantity FROM vehicles WHERE id = ?')
-    .get('persistent-test-id');
-  secondConnection.close();
-
-  assert.deepEqual({ ...saved }, { make: 'Volvo', model: 'XC60', quantity: 3 });
-});
-
-test('database schema changes are tracked and applied as migrations', (t) => {
-  const db = createDatabase(':memory:');
-  t.after(() => db.close());
-
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 5);
-  assert.equal(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'purchases'").get().name, 'purchases');
-  assert.equal(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'enquiries'").get().name, 'enquiries');
-});
-
-test('migrations upgrade an existing database without losing its inventory', (t) => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dealership-upgrade-'));
-  const filename = path.join(directory, 'legacy.sqlite');
-  let upgraded;
-  t.after(() => {
-    if (upgraded) upgraded.close();
-    fs.rmSync(directory, { recursive: true, force: true });
-  });
-
-  const legacy = new DatabaseSync(filename);
-  legacy.exec(`
-    CREATE TABLE users (
-      id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL COLLATE NOCASE UNIQUE,
-      password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TABLE vehicles (
-      id TEXT PRIMARY KEY, make TEXT NOT NULL, model TEXT NOT NULL, category TEXT NOT NULL,
-      price REAL NOT NULL, quantity INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    INSERT INTO users (id, name, email, password_hash)
-    VALUES ('legacy-user', 'Legacy User', 'legacy@example.com', 'legacy-hash');
-    INSERT INTO vehicles (id, make, model, category, price, quantity)
-    VALUES ('legacy-vehicle', 'Volvo', 'XC60', 'SUV', 42000, 3);
-  `);
-  legacy.close();
-
-  upgraded = createDatabase(filename);
-  const saved = upgraded.prepare('SELECT make, quantity, price FROM vehicles WHERE id = ?').get('legacy-vehicle');
-
-  assert.equal(upgraded.prepare('PRAGMA user_version').get().user_version, 5);
-  assert.deepEqual({ ...saved }, { make: 'Volvo', quantity: 3, price: 3990061.66 });
-  assert.equal(upgraded.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'purchases'").get().name, 'purchases');
-  assert.equal(upgraded.prepare("SELECT status FROM users WHERE id = 'legacy-user'").get().status, 'active');
-  assert.equal(upgraded.prepare("SELECT status FROM vehicles WHERE id = 'legacy-vehicle'").get().status, 'listed');
-});
-
-test('currency migration converts inventory and purchase snapshots using the recorded USD/INR rate', (t) => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dealership-currency-'));
-  const filename = path.join(directory, 'currency.sqlite');
-  let upgraded;
-  t.after(() => {
-    if (upgraded) upgraded.close();
-    fs.rmSync(directory, { recursive: true, force: true });
-  });
-
-  const beforeConversion = new DatabaseSync(filename);
-  beforeConversion.exec('PRAGMA foreign_keys = ON');
-  for (const migration of [
-    '001_initial_schema.sql',
-    '002_purchase_records.sql',
-    '003_vehicle_specifications.sql',
-  ]) {
-    beforeConversion.exec(fs.readFileSync(path.join(__dirname, '..', 'backend', 'database', 'migrations', 'sqlite', migration), 'utf8'));
-  }
-  beforeConversion.exec('PRAGMA user_version = 3');
-  beforeConversion.prepare(`
-    INSERT INTO users (id, name, email, password_hash)
-    VALUES ('currency-user', 'Currency User', 'currency@example.com', 'hash')
-  `).run();
-  beforeConversion.prepare(`
-    INSERT INTO vehicles (id, make, model, category, price, quantity)
-    VALUES ('currency-vehicle', 'Volvo', 'XC60', 'SUV', 42000, 1)
-  `).run();
-  beforeConversion.prepare(`
-    INSERT INTO purchases (id, vehicle_id, user_id, quantity, unit_price, total_amount)
-    VALUES ('currency-purchase', 'currency-vehicle', 'currency-user', 2, 42000, 84000)
-  `).run();
-  beforeConversion.close();
-
-  upgraded = createDatabase(filename);
-  const convertedVehicle = upgraded.prepare('SELECT price FROM vehicles WHERE id = ?').get('currency-vehicle');
-  const convertedPurchase = upgraded.prepare('SELECT unit_price, total_amount FROM purchases WHERE id = ?')
-    .get('currency-purchase');
-
-  assert.equal(convertedVehicle.price, 3990061.66);
-  assert.deepEqual({ ...convertedPurchase }, { unit_price: 3990061.66, total_amount: 7980123.31 });
-});
-
 test('authenticated users can retrieve their public account profile', async (t) => {
   const { app, userToken, close } = await createTestContext();
   t.after(close);
@@ -629,70 +518,9 @@ test('authenticated users can retrieve their public account profile', async (t) 
     name: 'Taylor Driver',
     email: 'taylor@example.com',
     role: 'user',
+    phone: '',
+    deliveryAddress: '',
   });
   assert.equal('password_hash' in response.body.user, false);
 });
 
-test('a purchase creates an immutable price snapshot and prevents deleting its vehicle', async (t) => {
-  const { app, db, adminToken, userToken, close } = await createTestContext();
-  t.after(close);
-
-  const created = await addVehicle(app, adminToken, vehicle({ price: 42000, quantity: 1 }));
-  const purchaseResponse = await request(app)
-    .post(`/api/vehicles/${created.body.vehicle.id}/purchase`)
-    .set(withToken(userToken));
-
-  assert.equal(purchaseResponse.status, 200);
-  assert.equal(purchaseResponse.body.purchase.unitPrice, 42000);
-  assert.equal(purchaseResponse.body.purchase.totalAmount, 42000);
-  assert.equal(purchaseResponse.body.purchase.quantity, 1);
-
-  await request(app).put(`/api/vehicles/${created.body.vehicle.id}`)
-    .set(withToken(adminToken)).send(vehicle({ price: 48000, quantity: 2 }));
-  const purchase = db.prepare('SELECT unit_price, total_amount, quantity FROM purchases WHERE vehicle_id = ?')
-    .get(created.body.vehicle.id);
-  assert.deepEqual({ ...purchase }, { unit_price: 42000, total_amount: 42000, quantity: 1 });
-
-  const deleted = await request(app).delete(`/api/vehicles/${created.body.vehicle.id}`)
-    .set(withToken(adminToken));
-  assert.equal(deleted.status, 409);
-});
-
-test('failed and concurrent purchases do not oversell or create extra purchase records', async (t) => {
-  const { app, db, adminToken, userToken, close } = await createTestContext();
-  t.after(close);
-
-  const created = await addVehicle(app, adminToken, vehicle({ quantity: 1 }));
-  const url = `/api/vehicles/${created.body.vehicle.id}/purchase`;
-  const responses = await Promise.all([
-    request(app).post(url).set(withToken(userToken)),
-    request(app).post(url).set(withToken(userToken)),
-  ]);
-
-  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 409]);
-  assert.equal(db.prepare('SELECT quantity FROM vehicles WHERE id = ?').get(created.body.vehicle.id).quantity, 0);
-  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM purchases WHERE vehicle_id = ?')
-    .get(created.body.vehicle.id).count, 1);
-});
-
-test('purchase transaction rolls back inventory when writing its audit record fails', async (t) => {
-  const { app, db, adminToken, userToken, close } = await createTestContext();
-  t.after(close);
-
-  const created = await addVehicle(app, adminToken, vehicle({ quantity: 1 }));
-  db.exec(`
-    CREATE TRIGGER reject_purchase_record
-    BEFORE INSERT ON purchases
-    BEGIN
-      SELECT RAISE(ABORT, 'simulated purchase record failure');
-    END;
-  `);
-
-  const response = await request(app)
-    .post(`/api/vehicles/${created.body.vehicle.id}/purchase`)
-    .set(withToken(userToken));
-
-  assert.equal(response.status, 500);
-  assert.equal(db.prepare('SELECT quantity FROM vehicles WHERE id = ?').get(created.body.vehicle.id).quantity, 1);
-  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM purchases').get().count, 0);
-});

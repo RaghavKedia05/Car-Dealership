@@ -1,6 +1,6 @@
 # Apex Auto
 
-A responsive dealership website with a public storefront, customer showroom, and administrator workspace. The Stitch-inspired interface uses live inventory from the existing Express API and supports SQLite locally or managed PostgreSQL such as Neon.
+A responsive dealership website with a public storefront, customer showroom, and administrator workspace. The Stitch-inspired interface uses live inventory from the existing Express API and uses PostgreSQL in every environment, including managed PostgreSQL such as Neon.
 
 ## Start here
 
@@ -23,12 +23,14 @@ A responsive dealership website with a public storefront, customer showroom, and
 Requires Node.js 22.13 or later.
 
 ```powershell
-npm.cmd install
+npm.cmd ci
+Copy-Item .env.example .env
+# Set DATABASE_URL and JWT_SECRET in .env before starting.
 $env:JWT_SECRET = "use-a-unique-secret-of-at-least-32-characters"
 npm.cmd run dev
 ```
 
-Open `http://localhost:5173`. Vite proxies API and health requests to Express on port 3001. The database is created at `data\dealership.db`; migrations run automatically. No demo inventory is seeded.
+Open `http://localhost:5173`. Vite proxies API and health requests to Express on port 3001. PostgreSQL is required: set `DATABASE_URL` in `.env` or the process environment. Migrations run automatically at API startup. No demo inventory is seeded. There is no local file-database fallback.
 
 Email verification is required to create customer accounts. Set `RESEND_API_KEY` and `PASSWORD_RESET_FROM` in the API environment using a verified sender domain before registering locally or in production. `APP_ORIGIN` is also required for password reset links.
 
@@ -42,22 +44,24 @@ npm.cmd run seed:admin
 
 ## Pages and API
 
-`/` is the public landing page; `/login` is the single sign-in page for both customer and administrator accounts. The app routes accounts by their assigned role after sign-in: customers land in `/showroom`, admins land in `/admin/dashboard`. New customer accounts must verify their email with a one-time code before they can sign in. `/contact` accepts public enquiries.
+`/` is the public landing page. Guests can browse `/showroom` and `/vehicles/:id` without signing in; requesting a vehicle requires an account. `/login` is the single sign-in page for both customer and administrator accounts. The app routes accounts by their assigned role after sign-in: customers land in `/showroom`, admins land in `/admin/dashboard`. New customer accounts must verify their email with a one-time code before they can sign in. `/contact` accepts public enquiries.
 
 The API is served at `/api`; `/healthz` reports readiness. See [API documentation](docs/api.md) and [OpenAPI schema](docs/openapi.yaml) for endpoint details.
 
 ## Connect Neon PostgreSQL
 
-The app uses SQLite locally unless `DATABASE_URL` is set. In Neon, create a project and copy the pooled connection string from the project's **Connect** dialog. Use the pooled endpoint (the hostname includes `-pooler`) for the hosted API, and keep the connection string private because it contains the database password.
+Set `DATABASE_URL` to your PostgreSQL connection string. For Neon, use the pooled connection string on the API host. Keep it private: it contains the database password.
 
-To import an existing local SQLite database, first stop the app and back up `data\dealership.db`. From PowerShell, set the Neon connection string and run:
+For a local PostgreSQL instance, set `POSTGRES_PASSWORD` in `.env` and run:
 
 ```powershell
-$env:DATABASE_URL = Read-Host "Paste the Neon PostgreSQL connection string"
-npm.cmd run db:import:postgres
+docker compose -f compose.postgres.yaml up -d --wait
+# In .env, set DATABASE_URL=postgresql://dealership:YOUR_URL_ENCODED_PASSWORD@localhost:5432/dealership
+npm.cmd run db:migrate
+npm.cmd run dev
 ```
 
-The importer initializes the PostgreSQL schema and refuses to copy into non-empty target tables. To import a different SQLite file, set `SQLITE_SOURCE_PATH` before running it. Verify the copied users, vehicles, purchases, and enquiries in Neon SQL Editor before switching production.
+The local database uses the `postgres-data` Docker volume. Changing `POSTGRES_PASSWORD` after initialization does not rotate an existing database user's password. Back up PostgreSQL with your provider's backup tools or `pg_dump`. The API, seed, and migration commands automatically read `.env`; existing process variables take precedence.
 
 For deployment, set `DATABASE_URL` and `JWT_SECRET` on the **Express API host**, plus `CORS_ORIGINS` for the exact website origin. Set Vercel's build-time `VITE_API_BASE_URL` to the API's HTTPS origin and redeploy. Never put `DATABASE_URL` in a `VITE_` variable or browser code. The DB pool defaults to 5 connections; tune `DATABASE_POOL_MAX` within your Neon plan's limits.
 
@@ -109,12 +113,14 @@ Checkout collects buyer and delivery details, records a vehicle order at the cur
 
 ### Run locally or deploy as one service
 
-For local/single-host deployment, Docker Compose serves the frontend and API together and persists SQLite in a named volume:
+Docker Compose builds and serves the frontend and API together. Set `DATABASE_URL` to a reachable PostgreSQL instance before starting:
 
 ```powershell
 Copy-Item .env.example .env
-# Set a unique JWT_SECRET in .env
+# Set DATABASE_URL and a unique JWT_SECRET in .env
 docker compose up --build -d
 ```
+
+When the database runs on your host, use `host.docker.internal` rather than `localhost` in the application container connection string on Docker Desktop. The app image has no database volume.
 
 More detailed deployment and security notes: [Dockerfile](Dockerfile), [Compose config](compose.yaml), and [security notes](docs/security.md).

@@ -1,8 +1,9 @@
+const { createTestDatabase, createTestApp, registerAccount } = require('./helpers/postgres');
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const request = require('supertest');
-const { createApp } = require('../backend/app');
-const { createDatabase } = require('../backend/database/database-adapters');
+
+
 const {
   buildComparison,
   generateAlternatives,
@@ -122,14 +123,14 @@ test('comparison returns current data, missing-spec notices, and grounded differ
 });
 
 test('finder and comparison endpoints require authentication and validate comparison IDs', async (t) => {
-  const db = createDatabase(':memory:');
-  const app = createApp({ db, jwtSecret: 'test-secret-that-is-long-enough' });
+  const db = await createTestDatabase();
+  const app = createTestApp({ db, jwtSecret: 'test-secret-that-is-long-enough' });
   t.after(() => db.close());
 
   assert.equal((await request(app).post('/api/ai/car-finder').send({ query: 'SUV' })).status, 401);
   assert.equal((await request(app).post('/api/ai/car-finder/compare').send({ vehicle_ids: [] })).status, 401);
 
-  const registration = await request(app).post('/api/auth/register').send({
+  const registration = await registerAccount(app, {
     name: 'Finder User',
     email: 'finder@example.com',
     password: 'correct-horse-battery',
@@ -153,10 +154,10 @@ test('finder and comparison endpoints require authentication and validate compar
 });
 
 test('finder endpoint uses real inventory and deterministic fallback when no provider is configured', async (t) => {
-  const db = createDatabase(':memory:');
-  const app = createApp({ db, jwtSecret: 'test-secret-that-is-long-enough' });
+  const db = await createTestDatabase();
+  const app = createTestApp({ db, jwtSecret: 'test-secret-that-is-long-enough' });
   t.after(() => db.close());
-  const registration = await request(app).post('/api/auth/register').send({
+  const registration = await registerAccount(app, {
     name: 'Finder User',
     email: 'fallback@example.com',
     password: 'correct-horse-battery',
@@ -167,10 +168,10 @@ test('finder endpoint uses real inventory and deterministic fallback when no pro
     password: 'correct-horse-battery',
   });
   const auth = { Authorization: `Bearer ${login.body.token}` };
-  db.prepare(`
+  (await db.run(`
     INSERT INTO vehicles (id, make, model, category, price, quantity, seating_capacity, fuel_type, mileage_kmpl)
     VALUES ('actual-car', 'Real Make', 'Real Model', 'SUV', 1800000, 2, 5, 'petrol', 18)
-  `).run();
+  `));
 
   const result = await request(app).post('/api/ai/car-finder')
     .set(auth).send({ query: 'SUV under ₹20 lakh with at least five seats and good fuel economy' });
@@ -184,14 +185,14 @@ test('finder endpoint uses real inventory and deterministic fallback when no pro
 });
 
 test('provider errors fall back safely and report that deterministic parsing was used', async (t) => {
-  const db = createDatabase(':memory:');
-  const app = createApp({
+  const db = await createTestDatabase();
+  const app = createTestApp({
     db,
     jwtSecret: 'test-secret-that-is-long-enough',
     aiParser: async () => { throw new Error('provider unavailable'); },
   });
   t.after(() => db.close());
-  const registration = await request(app).post('/api/auth/register').send({
+  const registration = await registerAccount(app, {
     name: 'Finder User',
     email: 'provider-fallback@example.com',
     password: 'correct-horse-battery',
@@ -212,10 +213,10 @@ test('provider errors fall back safely and report that deterministic parsing was
 });
 
 test('comparison endpoint loads current vehicle records and rejects missing IDs', async (t) => {
-  const db = createDatabase(':memory:');
-  const app = createApp({ db, jwtSecret: 'test-secret-that-is-long-enough' });
+  const db = await createTestDatabase();
+  const app = createTestApp({ db, jwtSecret: 'test-secret-that-is-long-enough' });
   t.after(() => db.close());
-  const registration = await request(app).post('/api/auth/register').send({
+  const registration = await registerAccount(app, {
     name: 'Finder User',
     email: 'compare@example.com',
     password: 'correct-horse-battery',
@@ -226,14 +227,14 @@ test('comparison endpoint loads current vehicle records and rejects missing IDs'
     password: 'correct-horse-battery',
   });
   const auth = { Authorization: `Bearer ${login.body.token}` };
-  db.prepare(`
+  (await db.run(`
     INSERT INTO vehicles (id, make, model, category, price, quantity, seating_capacity)
     VALUES ('00000000-0000-4000-8000-000000000001', 'Current', 'Record', 'Sedan', 1200000, 1, 5)
-  `).run();
-  db.prepare(`
+  `));
+  (await db.run(`
     INSERT INTO vehicles (id, make, model, category, price, quantity, seating_capacity)
     VALUES ('00000000-0000-4000-8000-000000000002', 'Current', 'Alternative', 'Sedan', 1300000, 1, 5)
-  `).run();
+  `));
 
   const missing = await request(app).post('/api/ai/car-finder/compare')
     .set(auth).send({

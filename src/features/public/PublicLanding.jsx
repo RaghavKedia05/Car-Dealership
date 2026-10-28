@@ -6,7 +6,7 @@ export function PublicLanding({ api, navigate, isAdmin, session }) {
   const [featuredVehicles, setFeaturedVehicles] = useState([]);
   const [loadingFeatured, setLoadingFeatured] = useState(true);
   const [featuredError, setFeaturedError] = useState(false);
-  const showroomPath = isAdmin ? '/admin/inventory' : session ? '/showroom' : '/login';
+  const showroomPath = isAdmin ? '/admin/inventory' : '/showroom';
 
   useEffect(() => {
     let active = true;
@@ -44,7 +44,7 @@ export function PublicLanding({ api, navigate, isAdmin, session }) {
         />
         <div className="landing-hero-shade" />
         <div className="landing-hero-content">
-          <p className="landing-kicker">APEX AUTO <span>·</span> PRECISION CRAFTED AUTOMOTIVE</p>
+          <p className="landing-kicker">APEX AUTO <span>·</span> YOUR NEXT CHAPTER STARTS HERE</p>
           <h1 id="landing-title">Find your next<br /><span>great drive.</span></h1>
           <p className="landing-hero-lede">Explore our current collection, review the details, and get in touch with a team ready to help you choose with confidence.</p>
           <div className="landing-hero-actions">
@@ -52,25 +52,21 @@ export function PublicLanding({ api, navigate, isAdmin, session }) {
               {isAdmin ? 'Manage inventory' : session ? 'Explore showroom' : 'Explore showroom'} <ArrowUpRight size={17} />
             </button>
             <button className="landing-secondary-button" type="button" onClick={() => navigate('/contact')}>
-              Enquire with our team
+              Talk to our team
             </button>
           </div>
         </div>
-        <div className="landing-hero-caption" aria-hidden="true">
-          <span>THOUGHTFUL SERVICE</span>
-          <span>VEHICLES FOR THE ROAD AHEAD</span>
-          <span>APEX AUTO · INDIA</span>
-        </div>
+
       </section>
 
       <section className="landing-featured" id="featured-allocations" aria-labelledby="landing-featured-title">
         <div className="landing-section-heading">
           <div>
-            <p className="landing-kicker">CURATED INVENTORY</p>
-            <h2 id="landing-featured-title">Featured <span>allocations.</span></h2>
+            <p className="landing-kicker">THE COLLECTION</p>
+            <h2 id="landing-featured-title">Explore our <span>latest arrivals.</span></h2>
           </div>
           <a className="landing-view-all" href={showroomPath} onClick={(event) => follow(event, showroomPath)}>
-            View complete fleet <ArrowUpRight size={16} />
+            Browse all vehicles <ArrowUpRight size={16} />
           </a>
         </div>
         {loadingFeatured ? (
@@ -128,7 +124,7 @@ export function PublicLanding({ api, navigate, isAdmin, session }) {
           <article>
             <span className="landing-benefit-icon"><Check size={21} /></span>
             <h3>Current listings</h3>
-            <p>Featured vehicles come from the live public catalogue, with availability shown as recorded.</p>
+            <p>Browse our latest vehicles, with pricing and availability in one place.</p>
           </article>
           <article>
             <span className="landing-benefit-icon"><ShieldCheck size={21} /></span>

@@ -8,15 +8,15 @@
   },
   "scripts": {
     "dev": "concurrently \"npm:dev:api\" \"npm:dev:web\"",
-    "dev:api": "node --watch backend/server.js",
+    "dev:api": "node --env-file-if-exists=.env --watch backend/server.js",
     "dev:web": "vite --host 0.0.0.0",
     "build": "vite build",
-    "start": "node backend/server.js",
+    "start": "node --env-file-if-exists=.env backend/server.js",
     "test": "node --test",
     "test:coverage": "node --experimental-test-coverage --test",
-    "seed:admin": "node backend/seed-admin.js",
-    "db:import:postgres": "node scripts/migrate-sqlite-to-postgres.js",
-    "stress": "node scripts/http-load-check.js"
+    "seed:admin": "node --env-file-if-exists=.env backend/seed-admin.js",
+    "stress": "node scripts/http-load-check.js",
+    "db:migrate": "node --env-file-if-exists=.env scripts/migrate-postgres.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
