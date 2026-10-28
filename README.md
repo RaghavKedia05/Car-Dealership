@@ -4,7 +4,17 @@ A full-stack car dealership web app. Customers browse the showroom, describe the
 
 **Stack:** React 19 · Vite 7 · Node.js 22 · Express 5 · PostgreSQL · Zod · JWT · Docker · GitHub Actions
 
-![Apex Auto home page](docs/images/home.png)
+## Home Page Screenshots
+
+<p align="center">
+  <img src="docs/images/home.png" alt="Home Page - Hero Section" width="49%">
+  <img src="docs/images/home-2.png" alt="Home Page - Featured Cars" width="49%">
+</p>
+
+<p align="center">
+  <img src="docs/images/home-3.png" alt="Home Page - AI Car Finder" width="49%">
+  <img src="docs/images/home-4.png" alt="Home Page - Additional Sections" width="49%">
+</p>
 
 ## Contents
 
