@@ -1,12 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowUpRight, CarFront, Check, ShieldCheck, UserRound } from 'lucide-react';
+import { ArrowRight, BadgeCheck, CalendarCheck, HandCoins, MessageSquare, Search, Sparkles } from 'lucide-react';
 import { money } from '../../lib/currency-format.js';
+import { VehicleImage } from '../../components/VehicleImage.jsx';
+import { stockBadge, titleCase } from '../../lib/vehicle-labels.js';
+
+const HERO_IMAGE = 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=2000&q=80';
 
 export function PublicLanding({ api, navigate, isAdmin, session }) {
   const [featuredVehicles, setFeaturedVehicles] = useState([]);
+  const [total, setTotal] = useState(null);
   const [loadingFeatured, setLoadingFeatured] = useState(true);
   const [featuredError, setFeaturedError] = useState(false);
-  const showroomPath = isAdmin ? '/admin/inventory' : '/showroom';
+  const [heroFailed, setHeroFailed] = useState(false);
+  const showroomPath = isAdmin ? '/admin/inventory' : session ? '/showroom' : '/login';
 
   useEffect(() => {
     let active = true;
@@ -14,14 +20,12 @@ export function PublicLanding({ api, navigate, isAdmin, session }) {
     setFeaturedError(false);
     api('/api/public/vehicles?page=1&pageSize=3&sortBy=createdAt&sortOrder=desc')
       .then((result) => {
-        if (active) setFeaturedVehicles(result.vehicles);
+        if (!active) return;
+        setFeaturedVehicles(result.vehicles);
+        setTotal(result.pagination?.total ?? result.vehicles.length);
       })
-      .catch(() => {
-        if (active) setFeaturedError(true);
-      })
-      .finally(() => {
-        if (active) setLoadingFeatured(false);
-      });
+      .catch(() => { if (active) setFeaturedError(true); })
+      .finally(() => { if (active) setLoadingFeatured(false); });
     return () => { active = false; };
   }, [api]);
 
@@ -33,76 +37,66 @@ export function PublicLanding({ api, navigate, isAdmin, session }) {
 
   return (
     <>
-      <section className="landing-hero" id="top" aria-labelledby="landing-title">
-        <img
-          className="landing-hero-image"
-          src="https://lh3.googleusercontent.com/aida-public/AB6AXuBU4-_lj0Y2qQDrqVF705J__LybIYgoMli1imgiD1Jd-otTbrcuz282ZhsYu3cdUGUQTO81AiDeRtnkaQpox9YPLD0XokHOiT1emMmA6YRabtJjD617b9kTiZazrwib0puYbGCZi5qoSzpeD20tdOvIFUmZ2cU6dQVu986cTYbFqrlkiBTAlADpJVkI5mSJ3yT88WJ8dr6QjS83hjK1ueluWBmYHbhlEhXeoVtIIDU"
-          alt=""
-          aria-hidden="true"
-          fetchPriority="high"
-          referrerPolicy="no-referrer"
-        />
-        <div className="landing-hero-shade" />
-        <div className="landing-hero-content">
-          <p className="landing-kicker">APEX AUTO <span>·</span> YOUR NEXT CHAPTER STARTS HERE</p>
-          <h1 id="landing-title">Find your next<br /><span>great drive.</span></h1>
-          <p className="landing-hero-lede">Explore our current collection, review the details, and get in touch with a team ready to help you choose with confidence.</p>
-          <div className="landing-hero-actions">
-            <button className="landing-primary-button" type="button" onClick={() => navigate(showroomPath)}>
-              {isAdmin ? 'Manage inventory' : session ? 'Explore showroom' : 'Explore showroom'} <ArrowUpRight size={17} />
+      <section className="hero" id="top" aria-labelledby="landing-title">
+        {!heroFailed && <img className="hero-image" src={HERO_IMAGE} alt="" aria-hidden="true" fetchPriority="high" referrerPolicy="no-referrer" onError={() => setHeroFailed(true)} />}
+        <div className="container hero-content">
+          <p className="eyebrow">Apex Auto · India</p>
+          <h1 id="landing-title">Find the car that fits <span>your life.</span></h1>
+          <p className="hero-lede">Browse our available cars, describe what you need in plain words, and reserve online in minutes — no pressure, no surprises.</p>
+          <div className="hero-actions">
+            <button className="btn btn-primary btn-lg" type="button" onClick={() => navigate(showroomPath)}>
+              {isAdmin ? 'Manage inventory' : 'Browse the showroom'} <ArrowRight size={17} />
             </button>
-            <button className="landing-secondary-button" type="button" onClick={() => navigate('/contact')}>
+            <button className="btn btn-outline-light btn-lg" type="button" onClick={() => navigate('/contact')}>
               Talk to our team
             </button>
           </div>
+          <div className="hero-stats">
+            <div><strong>{total === null ? '—' : total}</strong><span>Cars in the showroom</span></div>
+            <div><strong>24 hr</strong><span>Free reservation hold</span></div>
+            <div><strong>₹0</strong><span>Paid online to reserve</span></div>
+          </div>
         </div>
-
       </section>
 
-      <section className="landing-featured" id="featured-allocations" aria-labelledby="landing-featured-title">
-        <div className="landing-section-heading">
+      <section className="section container" id="featured" aria-labelledby="featured-title">
+        <div className="section-head">
           <div>
-            <p className="landing-kicker">THE COLLECTION</p>
-            <h2 id="landing-featured-title">Explore our <span>latest arrivals.</span></h2>
+            <p className="eyebrow">Just arrived</p>
+            <h2 className="section-title" id="featured-title">Featured cars</h2>
+            <p>A few of the latest additions to our showroom.</p>
           </div>
-          <a className="landing-view-all" href={showroomPath} onClick={(event) => follow(event, showroomPath)}>
-            Browse all vehicles <ArrowUpRight size={16} />
+          <a className="btn btn-secondary" href={showroomPath} onClick={(event) => follow(event, showroomPath)}>
+            View all cars <ArrowRight size={16} />
           </a>
         </div>
         {loadingFeatured ? (
-          <p className="landing-listing-status" role="status">Loading current listings…</p>
+          <div className="loading-block" role="status"><span className="spinner" /> Loading cars…</div>
         ) : featuredError ? (
-          <p className="landing-listing-status" role="status">Featured listings are temporarily unavailable. Please try the showroom again later.</p>
+          <div className="card empty"><p>Featured cars are unavailable right now. Please try again shortly.</p></div>
         ) : featuredVehicles.length ? (
-          <div className="landing-vehicle-grid">
+          <div className="vehicle-grid">
             {featuredVehicles.map((vehicle) => {
-              const title = `${vehicle.make} ${vehicle.model}`;
-              const specifications = [
-                vehicle.year,
-                vehicle.category,
-                vehicle.fuelType,
-                vehicle.mileageKmpl ? `${vehicle.mileageKmpl} km/l` : null,
-              ].filter(Boolean);
               const vehiclePath = `/vehicles/${encodeURIComponent(vehicle.id)}`;
+              const badge = stockBadge(vehicle);
               return (
-                <article className="landing-vehicle-card" key={vehicle.id}>
-                  <a className="landing-vehicle-image" href={vehiclePath} onClick={(event) => follow(event, vehiclePath)} aria-label={`View details for ${title}`}>
-                    {vehicle.imageUrl ? (
-                      <img src={vehicle.imageUrl} alt="" loading="lazy" />
-                    ) : (
-                      <CarFront size={54} strokeWidth={1} aria-hidden="true" />
-                    )}
-                    <span className="landing-vehicle-status">{vehicle.quantity > 0 ? 'AVAILABLE' : 'ENQUIRE FOR AVAILABILITY'}</span>
+                <article className="vehicle-card" key={vehicle.id}>
+                  <a href={vehiclePath} onClick={(event) => follow(event, vehiclePath)} aria-label={`View ${vehicle.make} ${vehicle.model}`}>
+                    <VehicleImage vehicle={vehicle}>
+                      <span className={badge.tone}>{badge.label}</span>
+                      <span className="badge badge-dark vehicle-category">{vehicle.category}</span>
+                    </VehicleImage>
                   </a>
-                  <div className="landing-vehicle-content">
-                    <p className="landing-vehicle-make">{[vehicle.year, vehicle.make].filter(Boolean).join(' · ')}</p>
-                    <h3>{vehicle.model}</h3>
-                    <p className="landing-vehicle-specs">{specifications.length ? specifications.join(' · ') : 'Contact us for recorded specifications'}</p>
-                    <div className="landing-vehicle-bottom">
-                      <strong>{money(vehicle.price)}</strong>
-                      <a href={vehiclePath} onClick={(event) => follow(event, vehiclePath)}>
-                        View details <ArrowUpRight size={15} />
-                      </a>
+                  <div className="vehicle-body">
+                    <span className="vehicle-make">{[vehicle.year, vehicle.make].filter(Boolean).join(' · ')}</span>
+                    <h3 className="vehicle-title"><a href={vehiclePath} onClick={(event) => follow(event, vehiclePath)}>{vehicle.model}</a></h3>
+                    <ul className="spec-list">
+                      {[titleCase(vehicle.fuelType), titleCase(vehicle.transmission), vehicle.mileageKmpl ? `${vehicle.mileageKmpl} km/l` : vehicle.electricRangeKm ? `${vehicle.electricRangeKm} km range` : null]
+                        .filter(Boolean).map((item) => <li key={item}>{item}</li>)}
+                    </ul>
+                    <div className="vehicle-foot">
+                      <div><span className="price-label">Ex-showroom</span><span className="price">{money(vehicle.price)}</span></div>
+                      <a className="btn btn-secondary btn-sm" href={vehiclePath} onClick={(event) => follow(event, vehiclePath)}>Details <ArrowRight size={14} /></a>
                     </div>
                   </div>
                 </article>
@@ -110,44 +104,62 @@ export function PublicLanding({ api, navigate, isAdmin, session }) {
             })}
           </div>
         ) : (
-          <p className="landing-listing-status">There are no vehicles listed at the moment. Please check back soon or contact our team.</p>
+          <div className="card empty"><h3>New cars arriving soon</h3><p>Check back shortly, or tell us what you’re looking for.</p></div>
         )}
       </section>
 
-      <section className="landing-about" id="about" aria-labelledby="landing-about-title">
-        <div className="landing-about-copy">
-          <p className="landing-kicker">ABOUT APEX AUTO</p>
-          <h2 id="landing-about-title">A more considered way to find <span>your next car.</span></h2>
-          <p>Choosing a vehicle should feel informed, personal, and straightforward. We bring our current dealership collection together with clear recorded details and a team ready to answer your questions.</p>
+      <section className="section container" id="about" aria-labelledby="about-title">
+        <div className="section-head">
+          <div>
+            <p className="eyebrow">Why Apex Auto</p>
+            <h2 className="section-title" id="about-title">Car buying, made simple</h2>
+            <p>Everything you need to choose your next car with confidence — in one place.</p>
+          </div>
         </div>
-        <div className="landing-benefits" id="services">
-          <article>
-            <span className="landing-benefit-icon"><Check size={21} /></span>
-            <h3>Current listings</h3>
-            <p>Browse our latest vehicles, with pricing and availability in one place.</p>
+        <div className="feature-grid">
+          <article className="card feature">
+            <span className="feature-icon"><Sparkles size={22} /></span>
+            <h3>Smart car finder</h3>
+            <p>Describe what you need — “7-seater diesel under ₹25 lakh” — and we’ll match it to cars in stock.</p>
           </article>
-          <article>
-            <span className="landing-benefit-icon"><ShieldCheck size={21} /></span>
-            <h3>Clear information</h3>
-            <p>Review the specifications available for each listing and ask us to clarify what matters to you.</p>
+          <article className="card feature">
+            <span className="feature-icon"><BadgeCheck size={22} /></span>
+            <h3>Transparent pricing</h3>
+            <p>Clear ex-showroom prices and full specifications for every car. Compare side-by-side before you decide.</p>
           </article>
-          <article>
-            <span className="landing-benefit-icon"><UserRound size={21} /></span>
-            <h3>Personal guidance</h3>
-            <p>Send an enquiry to start a conversation with the dealership team at your own pace.</p>
+          <article className="card feature">
+            <span className="feature-icon"><HandCoins size={22} /></span>
+            <h3>Reserve with no payment</h3>
+            <p>Hold your car for 24 hours online. Pay at the dealership, or ask us to call you back.</p>
           </article>
         </div>
       </section>
 
-      <section className="landing-contact-cta" aria-labelledby="landing-contact-title">
-        <div>
-          <p className="landing-kicker">YOUR NEXT DRIVE STARTS HERE</p>
-          <h2 id="landing-contact-title">Ready to find your <span>next car?</span></h2>
-          <p>Explore the showroom or send us a question about a vehicle.</p>
+      <section className="section container" aria-labelledby="how-title">
+        <div className="section-head">
+          <div>
+            <p className="eyebrow">How it works</p>
+            <h2 className="section-title" id="how-title">Three steps to your next car</h2>
+          </div>
         </div>
-        <button className="landing-primary-button" type="button" onClick={() => navigate('/contact')}>
-          Talk with our team <ArrowUpRight size={17} />
-        </button>
+        <div className="steps">
+          <div className="step"><span className="step-num">01</span><h3><Search size={18} style={{ verticalAlign: '-3px', marginRight: 8 }} />Search</h3><p>Browse the showroom or describe your ideal car to the smart finder.</p></div>
+          <div className="step"><span className="step-num">02</span><h3><CalendarCheck size={18} style={{ verticalAlign: '-3px', marginRight: 8 }} />Reserve</h3><p>Pick your car and reserve it online. We hold it for you for 24 hours.</p></div>
+          <div className="step"><span className="step-num">03</span><h3><MessageSquare size={18} style={{ verticalAlign: '-3px', marginRight: 8 }} />Drive away</h3><p>Our team confirms the details and helps you complete payment and delivery.</p></div>
+        </div>
+      </section>
+
+      <section className="section container" aria-labelledby="cta-title">
+        <div className="cta-band">
+          <div>
+            <h2 id="cta-title">Ready to find your next car?</h2>
+            <p>Start browsing, or send us a question and our team will get back to you.</p>
+          </div>
+          <div className="cta-band-actions">
+            <button className="btn btn-primary btn-lg" type="button" onClick={() => navigate(showroomPath)}>Browse cars <ArrowRight size={17} /></button>
+            <button className="btn btn-outline-light btn-lg" type="button" onClick={() => navigate('/contact')}>Contact us</button>
+          </div>
+        </div>
       </section>
     </>
   );

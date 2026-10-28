@@ -1,4 +1,4 @@
-const { createHash, createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } = require('node:crypto');
+const { createHash, randomBytes, randomUUID } = require('node:crypto');
 const path = require('node:path');
 const bcrypt = require('bcryptjs');
 const express = require('express');
@@ -48,11 +48,6 @@ const forgotPasswordSchema = z.object({
 const resetPasswordSchema = z.object({
   token: z.string().min(32).max(100),
   password: passwordSchema,
-});
-
-const registrationOtpSchema = z.object({
-  email: z.string().trim().email().max(254).transform((email) => email.toLowerCase()),
-  code: z.string().regex(/^\d{6}$/),
 });
 
 const vehicleSchema = z.object({
@@ -191,32 +186,6 @@ async function sendPasswordResetEmail(email, token) {
   return true;
 }
 
-async function sendRegistrationCodeEmail(email, code) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const sender = process.env.PASSWORD_RESET_FROM;
-  if (!apiKey || !sender) return false;
-
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: sender,
-      to: [email],
-      subject: 'Your Apex Auto verification code',
-      text: `Your Apex Auto email verification code is ${code}. It expires in 10 minutes. If you did not request this, ignore this email.`,
-      html: `<p>Your Apex Auto email verification code is:</p><p style="font-size:28px;font-weight:700;letter-spacing:8px">${code}</p><p>This code expires in 10 minutes. If you did not request this, ignore this email.</p>`,
-    }),
-  });
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '');
-    throw new Error(`Registration email provider returned HTTP ${response.status}: ${detail.slice(0, 200)}`);
-  }
-  return true;
-}
-
 function toVehicle(row) {
   if (!row) return null;
   return {
@@ -291,7 +260,6 @@ function createApp({
   authRateLimit = {},
   aiParser,
   aiRateLimit = {},
-  registrationEmailSender = sendRegistrationCodeEmail,
 } = {}) {
   if (!db) throw new Error('A database connection is required');
   if (!jwtSecret) throw new Error('JWT_SECRET must be configured');
@@ -373,13 +341,6 @@ function createApp({
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     handler: (_req, res) => res.status(429).json({ error: 'Too many password recovery attempts. Please try again later.' }),
-  });
-  const registrationOtpLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 10,
-    standardHeaders: 'draft-8',
-    legacyHeaders: false,
-    handler: (_req, res) => res.status(429).json({ error: 'Too many verification attempts. Please try again later.' }),
   });
 
   app.get('/healthz', async (_req, res) => {
@@ -467,111 +428,37 @@ function createApp({
   app.post('/api/auth/register', authLimiter, async (req, res) => {
     const input = validate(registrationSchema, req.body, res);
     if (!input) return;
-    if (registrationEmailSender === sendRegistrationCodeEmail && (!process.env.RESEND_API_KEY || !process.env.PASSWORD_RESET_FROM)) {
-      return res.status(503).json({ error: 'Email verification is not configured yet. Please contact the dealership.' });
-    }
     if (await db.get('SELECT 1 FROM users WHERE LOWER(email) = LOWER(?)', input.email)) {
       return res.status(409).json({ error: 'An account with that email already exists' });
     }
 
-    const now = Date.now();
-    const code = String(randomInt(100000, 1000000));
-    const codeHash = createHmac('sha256', jwtSecret).update(`${input.email}:${code}`).digest('hex');
+    const user = {
+      id: randomUUID(),
+      name: input.name,
+      email: input.email,
+      role: 'user',
+      status: 'active',
+      auth_version: 0,
+    };
     const passwordHash = await bcrypt.hash(input.password, 12);
-    const challenge = await db.transaction(async (tx) => {
-      await tx.run('DELETE FROM registration_verifications WHERE expires_at <= ?', now);
-      const existing = await tx.get('SELECT id, sent_at FROM registration_verifications WHERE email = ?', input.email);
-      if (existing && now - existing.sent_at < 60_000) return { state: 'cooldown' };
-      if (existing) {
-        await tx.run(`
-          UPDATE registration_verifications
-          SET name = ?, password_hash = ?, code_hash = ?, expires_at = ?, attempts = 0, sent_at = ?
-          WHERE id = ?
-        `, input.name, passwordHash, codeHash, now + 10 * 60 * 1000, now, existing.id);
-        return { state: 'send', id: existing.id };
-      }
-      const id = randomUUID();
-      await tx.run(`
-        INSERT INTO registration_verifications
-          (id, email, name, password_hash, code_hash, expires_at, attempts, sent_at)
-        VALUES (?, ?, ?, ?, ?, ?, 0, ?)
-      `, id, input.email, input.name, passwordHash, codeHash, now + 10 * 60 * 1000, now);
-      return { state: 'send', id };
-    });
-    if (challenge.state === 'cooldown') {
-      return res.status(429).json({ error: 'A code was just sent. Wait one minute before requesting another.' });
-    }
-
     try {
-      await registrationEmailSender(input.email, code);
-    } catch (error) {
-      await db.run('DELETE FROM registration_verifications WHERE id = ? AND code_hash = ?', challenge.id, codeHash);
-      console.error('Could not send registration verification code:', error.message);
-      return res.status(502).json({ error: 'We could not send your verification code. Please try again shortly.' });
-    }
-    return res.status(202).json({ message: 'A six-digit verification code was sent to your email address.' });
-  });
-
-  app.post('/api/auth/register/verify', registrationOtpLimiter, async (req, res) => {
-    const input = validate(registrationOtpSchema, req.body, res);
-    if (!input) return;
-    const now = Date.now();
-    const submittedHash = createHmac('sha256', jwtSecret).update(`${input.email}:${input.code}`).digest('hex');
-    const outcome = await db.transaction(async (tx) => {
-      if (await tx.get('SELECT 1 FROM users WHERE LOWER(email) = LOWER(?)', input.email)) {
-        return { state: 'duplicate' };
-      }
-      const challenge = await tx.get(
-        'SELECT id, name, email, password_hash, code_hash, expires_at, attempts FROM registration_verifications WHERE email = ?',
-        input.email,
-      );
-      if (!challenge || challenge.expires_at <= now) {
-        if (challenge) await tx.run('DELETE FROM registration_verifications WHERE id = ?', challenge.id);
-        return { state: 'invalid' };
-      }
-      if (challenge.attempts >= 5) return { state: 'locked' };
-      const expectedHash = Buffer.from(challenge.code_hash, 'hex');
-      const actualHash = Buffer.from(submittedHash, 'hex');
-      if (expectedHash.length !== actualHash.length || !timingSafeEqual(expectedHash, actualHash)) {
-        await tx.run('UPDATE registration_verifications SET attempts = attempts + 1 WHERE id = ?', challenge.id);
-        return { state: 'invalid' };
-      }
-      const consumed = await tx.run(
-        'DELETE FROM registration_verifications WHERE id = ? AND code_hash = ? AND expires_at > ? AND attempts < 5',
-        challenge.id, challenge.code_hash, now,
-      );
-      if (!consumed.changes) return { state: 'invalid' };
-      const user = {
-        id: randomUUID(),
-        name: challenge.name,
-        email: challenge.email,
-        password_hash: challenge.password_hash,
-        role: 'user',
-        status: 'active',
-        auth_version: 0,
-      };
-      await tx.run(`
+      await db.run(`
         INSERT INTO users (id, name, email, password_hash, updated_at)
         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, user.id, user.name, user.email, user.password_hash);
-      return { state: 'verified', user };
-    });
-    if (outcome.state === 'locked') {
-      return res.status(429).json({ error: 'Too many incorrect codes. Request a new verification code.' });
-    }
-    if (outcome.state === 'duplicate') {
-      return res.status(409).json({ error: 'An account with that email already exists' });
-    }
-    if (outcome.state === 'invalid') {
-      return res.status(400).json({ error: 'That verification code is invalid or expired. Request a new one.' });
+      `, user.id, user.name, user.email, passwordHash);
+    } catch (error) {
+      if (/unique|duplicate/i.test(error.message)) {
+        return res.status(409).json({ error: 'An account with that email already exists' });
+      }
+      throw error;
     }
 
-    const token = jwt.sign({ ver: outcome.user.auth_version }, jwtSecret, {
-      subject: outcome.user.id,
+    const token = jwt.sign({ ver: user.auth_version }, jwtSecret, {
+      subject: user.id,
       expiresIn: '8h',
       jwtid: randomUUID(),
     });
-    return res.status(201).json({ token, user: publicUser(outcome.user) });
+    return res.status(201).json({ token, user: publicUser(user) });
   });
 
   app.post('/api/auth/login', authLimiter, async (req, res) => {

@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
-import { ArrowUpRight, Check, CircleHelp, LockKeyhole } from 'lucide-react';
+import { ArrowRight, Check, CircleAlert } from 'lucide-react';
 import { apiUrl, reportError, parseApiResponse } from '../../lib/api-client.js';
 
 export function AuthForm({ mode, setMode, navigate, onAuthenticated, setError, error, notice, setNotice }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [otp, setOtp] = useState('');
-  const [verificationPending, setVerificationPending] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const registering = mode === 'register';
 
@@ -16,87 +14,57 @@ export function AuthForm({ mode, setMode, navigate, onAuthenticated, setError, e
     setSubmitting(true);
     setError('');
     try {
-      const verifying = registering && verificationPending;
-      const endpoint = verifying ? '/api/auth/register/verify' : `/api/auth/${registering ? 'register' : 'login'}`;
-      const payload = verifying
-        ? { email, code: otp }
-        : { ...(registering ? { name } : {}), email, password };
-      const response = await fetch(apiUrl(endpoint), {
+      const response = await fetch(apiUrl(`/api/auth/${registering ? 'register' : 'login'}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...(registering ? { name } : {}), email, password }),
       });
-      const body = await parseApiResponse(response, 'We could not sign you in. Please try again.');
-      if (registering && !verifying) {
-        setVerificationPending(true);
-        setOtp('');
-        setNotice(body.message || 'A verification code was sent to your email.');
-        return;
-      }
-      if (verifying) {
-        onAuthenticated({ token: body.token, user: body.user });
-        return;
-      }
+      const body = await parseApiResponse(
+        response,
+        registering ? 'We couldn’t create your account. Please try again.' : 'We couldn’t sign you in. Please try again.',
+      );
       onAuthenticated({ token: body.token, user: body.user });
     } catch (requestError) {
-      reportError(requestError);
-      setError(requestError.message);
+      if (requestError instanceof TypeError) reportError(requestError);
+      setError(requestError instanceof TypeError ? 'We can’t connect right now. Please try again.' : requestError.message);
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function resendCode() {
-    setSubmitting(true);
+  function switchMode() {
+    setMode(registering ? 'login' : 'register');
     setError('');
     setNotice('');
-    try {
-      const response = await fetch(apiUrl('/api/auth/register'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
-      });
-      const body = await parseApiResponse(response, 'We could not send a new verification code. Please try again.');
-      setNotice(body.message || 'A new verification code was sent.');
-    } catch (requestError) {
-      reportError(requestError);
-      setError(requestError.message);
-    } finally {
-      setSubmitting(false);
-    }
   }
 
   return (
-    <form className="auth-form stitch-auth-card" onSubmit={submit}>
-      <h3>{registering ? verificationPending ? 'Verify your email.' : 'Create your account.' : 'Welcome back.'}</h3>
+    <form className="auth-card" onSubmit={submit}>
+      <h2>{registering ? 'Create your account' : 'Welcome back'}</h2>
       <p>{registering
-        ? verificationPending
-          ? `Enter the six-digit code sent to ${email}. It expires in 10 minutes.`
-          : 'Save your details and manage your vehicle orders.'
-        : 'Enter your email and password to continue.'}</p>
-      {notice && <div className="form-success" role="status"><Check size={15} /> {notice}</div>}
-      {error && <div className="form-error" role="alert"><CircleHelp size={16} /> {error}</div>}
-      {registering && !verificationPending && <label className="form-label">YOUR NAME<input required minLength="2" maxLength="80" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Alex Morgan" /></label>}
-      {(!registering || !verificationPending) && <label className="form-label">EMAIL ADDRESS<input required type="email" maxLength="254" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>}
-      {registering && verificationPending && <label className="form-label">EMAIL VERIFICATION CODE<input required type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength="6" maxLength="6" value={otp} onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" /></label>}
-      {(!registering || !verificationPending) && <label className="form-label">PASSWORD<input required type="password" minLength={registering ? 12 : 1} maxLength="72" autoComplete={registering ? 'new-password' : 'current-password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={registering ? 'At least 12 characters' : 'Your password'} /></label>}
-      {!registering && <button className="auth-forgot-link" type="button" onClick={() => navigate('/forgot-password')}>Forgot password?</button>}
-      {registering && verificationPending && <button className="auth-forgot-link" type="button" disabled={submitting} onClick={resendCode}>Resend verification code</button>}
-      <button className="auth-submit" disabled={submitting} type="submit">
-        {submitting ? 'One moment…' : registering ? verificationPending ? 'Verify email & create account' : 'Continue with email verification' : 'Sign in'}
-        <ArrowUpRight size={16} />
-      </button>
-      <div className="auth-switch">
-        <span>{registering ? verificationPending ? 'Want to use another email?' : 'Already have an account?' : 'New around here?'}</span>
-        <button type="button" onClick={() => {
-          if (registering && verificationPending) setVerificationPending(false);
-          else setMode(registering ? 'login' : 'register');
-          setOtp(''); setError(''); setNotice('');
-        }}>
-          {registering ? verificationPending ? 'Change details' : 'Sign in' : 'Create an account'}
+        ? 'It only takes a minute. You’ll be able to browse, compare, and reserve cars.'
+        : 'Sign in to browse the showroom and manage your reservations.'}</p>
+      {notice && <div className="alert alert-success" role="status"><Check size={16} /><span>{notice}</span></div>}
+      {error && <div className="alert alert-error" role="alert"><CircleAlert size={16} /><span>{error}</span></div>}
+      <div className="form-stack">
+        {registering && (
+          <label className="field">Full name<input required minLength="2" maxLength="80" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" /></label>
+        )}
+        <label className="field">Email<input required type="email" maxLength="254" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>
+        <label className="field">Password
+          <input required type="password" minLength={registering ? 12 : 1} maxLength="72" autoComplete={registering ? 'new-password' : 'current-password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={registering ? 'At least 12 characters' : 'Your password'} />
+        </label>
+        {!registering && <div className="auth-row"><button className="link-btn" type="button" onClick={() => navigate('/forgot-password')}>Forgot password?</button></div>}
+        <button className="btn btn-primary btn-lg btn-block" disabled={submitting} type="submit">
+          {submitting && <span className="spinner spinner-sm" />}
+          {submitting ? 'Please wait…' : registering ? 'Create account' : 'Sign in'}
+          {!submitting && <ArrowRight size={16} />}
         </button>
       </div>
-      <span className="form-secure"><LockKeyhole size={13} /> YOUR DETAILS STAY YOURS</span>
+      <p className="auth-switch">
+        {registering ? 'Already have an account? ' : 'New to Apex Auto? '}
+        <button className="link-btn" type="button" onClick={switchMode}>{registering ? 'Sign in' : 'Create an account'}</button>
+      </p>
     </form>
   );
 }

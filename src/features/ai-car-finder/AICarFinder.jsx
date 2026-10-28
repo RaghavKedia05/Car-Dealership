@@ -1,8 +1,28 @@
 import React, { useRef, useState } from 'react';
-import { ArrowUpRight, CarFront, LockKeyhole, Share2, Sparkles, X } from "lucide-react";
+import { ArrowRight, CircleAlert, Fuel, Gauge, Search, Settings2, Share2, Sparkles, Users, X } from 'lucide-react';
 import { apiUrl, reportError, parseApiResponse } from '../../lib/api-client.js';
 import { money } from '../../lib/currency-format.js';
 import { useDialogAccessibility } from '../../hooks/useDialogAccessibility.js';
+import { VehicleImage } from '../../components/VehicleImage.jsx';
+import { RELAXED_LABELS, titleCase } from '../../lib/vehicle-labels.js';
+
+const SUGGESTIONS = [
+  'Family SUV under ₹20 lakh with 5+ seats',
+  'Automatic car for city driving under ₹15 lakh',
+  'Electric car with long range',
+  'Fuel-efficient petrol car under ₹10 lakh',
+];
+
+const SPEC_LABELS = {
+  bodyType: 'Body type', year: 'Year', fuelType: 'Fuel', transmission: 'Transmission', seatingCapacity: 'Seats',
+  mileageKmpl: 'Mileage', electricRangeKm: 'Electric range', engineCapacityCc: 'Engine', groundClearanceMm: 'Ground clearance', safetyFeatures: 'Safety',
+};
+const SPEC_UNITS = { mileageKmpl: ' km/l', electricRangeKm: ' km', engineCapacityCc: ' cc', groundClearanceMm: ' mm' };
+
+function formatSpec(key, value) {
+  if (value === null || value === undefined || value === '') return null;
+  return `${['fuelType', 'transmission'].includes(key) ? titleCase(value) : value}${SPEC_UNITS[key] || ''}`;
+}
 
 export function AICarFinder({ session, onPurchase, onUnauthorized }) {
   const [query, setQuery] = useState('');
@@ -17,23 +37,20 @@ export function AICarFinder({ session, onPurchase, onUnauthorized }) {
   const detailsDialogRef = useRef(null);
   useDialogAccessibility(detailsDialogRef, () => setDetails(null), Boolean(details));
 
-  const suggestions = [
-    'Family SUV under ₹20 lakh with at least five seats',
-    'Automatic car for city driving under ₹15 lakh',
-    'Electric car with a long driving range',
-    'Fuel-efficient petrol car under ₹10 lakh',
-  ];
+  async function authorizedPost(path, payload, fallback) {
+    const response = await fetch(apiUrl(path), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+      body: JSON.stringify(payload),
+    });
+    return parseApiResponse(response, fallback);
+  }
 
   async function submit(nextQuery = query) {
     const cleanQuery = nextQuery.trim();
-    if (!session) {
-      setError('Sign in to search the live vehicle inventory.');
-      reportError(new Error('Sign in to search the live vehicle inventory.'));
-      return;
-    }
-    if (cleanQuery.length < 3 || cleanQuery.length > 2000) {
-      setError('Enter a request between 3 and 2,000 characters.');
-      reportError(new Error('Enter a request between 3 and 2,000 characters.'));
+    if (!session) return;
+    if (cleanQuery.length < 3) {
+      setError('Tell us a little more about the car you want — for example, budget, seats, or fuel type.');
       return;
     }
     setQuery(cleanQuery);
@@ -43,21 +60,12 @@ export function AICarFinder({ session, onPurchase, onUnauthorized }) {
     setComparison(null);
     setSelectedIds([]);
     try {
-      const response = await fetch(apiUrl('/api/ai/car-finder'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.token}`,
-        },
-        body: JSON.stringify({ query: cleanQuery }),
-      });
-      const body = await parseApiResponse(response, 'Car Finder could not complete this search.');
+      const body = await authorizedPost('/api/ai/car-finder', { query: cleanQuery.slice(0, 2000) }, 'We couldn’t complete that search. Please try again.');
       setResult(body);
+      window.requestAnimationFrame(() => document.getElementById('finder-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
     } catch (failure) {
-      if (failure.status === undefined) {
-        reportError(failure);
-      }
-      setError(failure.message || 'Network error while searching the vehicle inventory.');
+      if (failure instanceof TypeError) reportError(failure);
+      setError(failure instanceof TypeError ? 'We can’t connect right now. Please try again.' : failure.message);
       if (failure.status === 401) onUnauthorized();
     } finally {
       setLoading(false);
@@ -91,24 +99,12 @@ export function AICarFinder({ session, onPurchase, onUnauthorized }) {
     setComparing(true);
     setError('');
     try {
-      const response = await fetch(apiUrl('/api/ai/car-finder/compare'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.token}`,
-        },
-        body: JSON.stringify({ vehicle_ids: selectedIds, original_query: query }),
-      });
-      const body = await parseApiResponse(response, 'The selected vehicles could not be compared.');
+      const body = await authorizedPost('/api/ai/car-finder/compare', { vehicle_ids: selectedIds, original_query: query }, 'We couldn’t compare those cars. Please try again.');
       setComparison(body);
-      window.requestAnimationFrame(() => {
-        document.getElementById('comparison')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
+      window.requestAnimationFrame(() => document.getElementById('comparison')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
     } catch (failure) {
-      if (failure.status === undefined) {
-        reportError(failure);
-      }
-      setError(failure.message || 'Network error while comparing vehicles.');
+      if (failure instanceof TypeError) reportError(failure);
+      setError(failure instanceof TypeError ? 'We can’t connect right now. Please try again.' : failure.message);
       if (failure.status === 401) onUnauthorized();
     } finally {
       setComparing(false);
@@ -125,231 +121,159 @@ export function AICarFinder({ session, onPurchase, onUnauthorized }) {
 
   async function shareVehicle(vehicle) {
     const title = `${vehicle.make} ${vehicle.model}`;
-    const text = `${title} · ${money(vehicle.price)} · ${vehicle.quantity} in stock`;
+    const url = `${window.location.origin}/vehicles/${vehicle.id}`;
+    const text = `${title} · ${money(vehicle.price)} at Apex Auto`;
     setShareNotice('');
     try {
       if (navigator.share) {
-        await navigator.share({ title, text, url: `${window.location.origin}/vehicles/${encodeURIComponent(vehicle.id)}` });
-        setShareNotice(`${title} shared.`);
+        await navigator.share({ title, text, url });
       } else if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(`${text} — ${window.location.origin}/vehicles/${encodeURIComponent(vehicle.id)}`);
-        setError('');
-        setShareNotice('Vehicle details copied to the clipboard.');
-      } else {
-        setError('Sharing is not available in this browser.');
-        reportError(new Error('Sharing is not available in this browser.'));
+        await navigator.clipboard.writeText(`${text} — ${url}`);
+        setShareNotice('Link copied to clipboard.');
       }
     } catch (shareError) {
-      if (shareError.name !== 'AbortError') {
-        setShareNotice('');
-        setError('Could not share this vehicle. Please try again.');
-        reportError(new Error('Could not share this vehicle. Please try again.'));
-      }
+      if (shareError.name !== 'AbortError') setShareNotice('Couldn’t share this car. Please try again.');
     }
   }
 
-  const selectedVehicles = result
-    ? [...result.matches, ...result.alternatives]
-      .filter((item) => selectedIds.includes(item.vehicle.id))
-      .map((item) => `${item.vehicle.make} ${item.vehicle.model}`)
-    : [];
-
+  const allItems = result ? [...result.matches, ...result.alternatives] : [];
+  const selectedNames = allItems.filter((item) => selectedIds.includes(item.vehicle.id)).map((item) => `${item.vehicle.make} ${item.vehicle.model}`);
 
   function recommendationCard(item) {
     const vehicle = item.vehicle;
     const specs = vehicle.specifications || {};
     const isSelected = selectedIds.includes(vehicle.id);
+    const soldOut = vehicle.quantity < 1;
+    const chips = [
+      specs.fuelType && [Fuel, titleCase(specs.fuelType)],
+      specs.transmission && [Settings2, titleCase(specs.transmission)],
+      specs.seatingCapacity && [Users, `${specs.seatingCapacity} seats`],
+      (specs.mileageKmpl || specs.electricRangeKm) && [Gauge, specs.mileageKmpl ? `${specs.mileageKmpl} km/l` : `${specs.electricRangeKm} km`],
+    ].filter(Boolean);
     return (
-      <article className="finder-card" key={vehicle.id}>
-        <div className="vehicle-art">
-          <div className="vehicle-art-grid" />
-          <span className={`finder-match-label ${item.isExactMatch ? 'is-exact' : 'is-alternative'}`}>
-            {item.isExactMatch ? 'EXACT MATCH' : `ALTERNATIVE · RELAXED ${item.relaxedConstraint}`}
+      <article className="vehicle-card match-card" key={vehicle.id}>
+        <VehicleImage vehicle={vehicle}>
+          <span className={item.isExactMatch ? 'badge badge-success' : 'badge badge-warning'}>
+            {item.isExactMatch ? 'Great match' : `Close match · ${RELAXED_LABELS[item.relaxedConstraint] || 'one change'}`}
           </span>
-          <CarFront size={80} strokeWidth={0.9} aria-hidden="true" />
-          <span className={`vehicle-stock-indicator ${vehicle.quantity < 1 ? 'is-sold-out' : ''}`}>
-            <span />{vehicle.quantity > 0 ? `${vehicle.quantity} IN STOCK` : 'OUT OF STOCK'}
-          </span>
-        </div>
-        <div className="finder-card-content">
-          <div className="finder-card-title">
-            <div>
-              <p className="finder-card-make">{(vehicle.year || specs.year) ? `${vehicle.year || specs.year} · ` : ''}{vehicle.make} · {vehicle.category}</p>
-              <h3>{vehicle.model}</h3>
+          <span className="badge badge-dark vehicle-category">{vehicle.category}</span>
+        </VehicleImage>
+        <div className="vehicle-body">
+          <span className="vehicle-make">{[specs.year, vehicle.make].filter(Boolean).join(' · ')}</span>
+          <h3 className="vehicle-title">{vehicle.model}</h3>
+          {chips.length > 0 && <ul className="spec-list">{chips.map(([Icon, label]) => <li key={label}><Icon size={14} /> {label}</li>)}</ul>}
+          {item.reasons?.length > 0 && <p className="match-reason">{item.reasons.join(' ')}</p>}
+          {item.tradeOffs?.length > 0 && <ul className="match-tradeoffs">{item.tradeOffs.map((tradeOff) => <li key={tradeOff}>{tradeOff}</li>)}</ul>}
+          <label className="compare-toggle">
+            <input type="checkbox" checked={isSelected} disabled={!isSelected && selectedIds.length >= 3} onChange={() => toggleSelection(vehicle.id)} />
+            Compare
+          </label>
+          <div className="vehicle-foot">
+            <div><span className="price-label">Ex-showroom</span><span className="price">{money(vehicle.price)}</span></div>
+            <div className="match-actions">
+              <button type="button" className="icon-btn" onClick={() => shareVehicle(vehicle)} aria-label={`Share ${vehicle.make} ${vehicle.model}`}><Share2 size={15} /></button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setDetails(item)}>Details</button>
+              <button type="button" className="btn btn-dark btn-sm" disabled={soldOut} onClick={() => purchaseRecommendation(vehicle)}>{soldOut ? 'Sold out' : 'Reserve'}</button>
             </div>
-            <p className="finder-price">{money(vehicle.price)}</p>
           </div>
-          <div className="finder-card-specs">
-            {[
-              ['FUEL', specs.fuelType],
-              ['TRANSMISSION', specs.transmission],
-              ['SEATS', specs.seatingCapacity],
-              ['MILEAGE', specs.mileageKmpl ? `${specs.mileageKmpl} km/l` : null],
-              ['RANGE', specs.electricRangeKm ? `${specs.electricRangeKm} km` : null],
-              ['ENGINE', specs.engineCapacityCc ? `${specs.engineCapacityCc} cc` : null],
-            ].map(([label, value]) => (
-              <div key={label}><span>{label}</span><strong>{value ?? 'Not recorded'}</strong></div>
-            ))}
-          </div>
-          <p className="finder-reason">{item.reasons?.length
-            ? item.reasons.join(' ')
-            : 'Matches the stated vehicle requirements.'}</p>
-        {item.tradeOffs?.length > 0 && (
-          <ul className="finder-tradeoffs">
-            {item.tradeOffs.map((tradeOff) => <li key={tradeOff}>{tradeOff}</li>)}
-          </ul>
-        )}
-        {item.alternativeExplanation && <p className="finder-alternative-copy">{item.alternativeExplanation}</p>}
-        <div className="finder-card-actions">
-          <button type="button" className="finder-secondary" onClick={() => setDetails(item)}>View details</button>
-          <button type="button" className="finder-share" onClick={() => shareVehicle(vehicle)} aria-label={`Share ${vehicle.make} ${vehicle.model}`}>
-            <Share2 size={16} />
-          </button>
-          <button
-            type="button"
-            className="purchase-button"
-            disabled={vehicle.quantity < 1}
-            onClick={() => purchaseRecommendation(vehicle)}
-          >
-            {vehicle.quantity < 1 ? 'Sold out' : 'Request this car'}
-          </button>
-        </div>
-        <label className="compare-select">
-          <input
-            type="checkbox"
-            checked={isSelected}
-            disabled={!isSelected && selectedIds.length >= 3}
-            onChange={() => toggleSelection(vehicle.id)}
-            aria-label={`Select ${vehicle.make} ${vehicle.model} for comparison`}
-          />
-          Add to comparison
-        </label>
         </div>
       </article>
     );
   }
 
   return (
-    <section className="finder-section" id="ai-finder">
-      <div className="finder-topline">
-        <div className="finder-heading">
-          <p className="eyebrow"><span className="eyebrow-line" /> NEED A HAND? · LIVE INVENTORY</p>
-          <h2>Let us help you <span>narrow it down.</span></h2>
-          <p>Describe what matters. We’ll match your needs against vehicles currently in this showroom.</p>
-        </div>
-      </div>
-      <div className="finder-search">
-        <div className="finder-query-heading"><Sparkles size={18} /><label htmlFor="car-finder-query">DESCRIBE YOUR NEXT CAR</label></div>
-        <textarea
-          id="car-finder-query"
-          aria-describedby="finder-query-help"
-          rows="3"
-          maxLength="2000"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault();
-              submit();
-            }
-          }}
-          placeholder="e.g. A spacious automatic SUV for family road trips under ₹20 lakh…"
-        />
-        <div className="finder-submit-row">
-          <span id="finder-query-help"><LockKeyhole size={13} /> {query.length}/2,000 · Your search text only; account and payment details are not used.</span>
+    <section id="finder">
+      <div className="finder">
+        <div className="finder-head">
           <div>
-            {result && <button className="finder-secondary" type="button" onClick={clearSearch}>Clear</button>}
-            <button className="finder-submit" type="button" disabled={loading || !session} onClick={() => submit()}>
-              {loading ? <><span className="loading-spinner spinner-small" /> Searching…</> : <><Sparkles size={15} /> Find vehicles</>}
-            </button>
+            <p className="eyebrow"><Sparkles size={14} /> Smart car finder</p>
+            <h1 className="page-title">What are you looking for?</h1>
+            <p>Describe your ideal car in your own words — budget, seats, fuel, how you’ll use it — and we’ll find the best matches in our showroom.</p>
           </div>
         </div>
-      </div>
-
-      {!session && <p className="finder-auth-note">Sign in to search current inventory and compare vehicles.</p>}
-      {error && <div className="notice notice-error finder-notice" role="alert">{error}</div>}
-      {shareNotice && <p className="share-notice" role="status">{shareNotice}</p>}
-
-      <div className="finder-suggestions" aria-label="Suggested searches">
-        <span>QUICK SEARCH</span>
-        {suggestions.map((suggestion) => (
-          <button key={suggestion} type="button" disabled={!session || loading} onClick={() => submit(suggestion)}>
-            {suggestion}
+        <form className="finder-box" onSubmit={(event) => { event.preventDefault(); submit(); }}>
+          <Search size={20} />
+          <label htmlFor="car-finder-query" className="sr-only">Describe the car you want</label>
+          <textarea
+            id="car-finder-query"
+            rows="1"
+            maxLength="2000"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                submit();
+              }
+            }}
+            placeholder="e.g. A spacious automatic SUV for family road trips under ₹20 lakh"
+          />
+          {result && <button className="btn btn-ghost" type="button" onClick={clearSearch}>Clear</button>}
+          <button className="btn btn-primary" type="submit" disabled={loading || !session}>
+            {loading ? <><span className="spinner spinner-sm" /> Searching…</> : <>Find cars <ArrowRight size={16} /></>}
           </button>
-        ))}
+        </form>
+        <div className="chips" aria-label="Try a search">
+          {SUGGESTIONS.map((suggestion) => (
+            <button className="chip" key={suggestion} type="button" disabled={!session || loading} onClick={() => submit(suggestion)}>{suggestion}</button>
+          ))}
+        </div>
+        {error && <div className="alert alert-error" role="alert"><CircleAlert size={16} /><span>{error}</span></div>}
       </div>
 
-
+      {shareNotice && <div className="alert alert-success" role="status" style={{ marginTop: 16 }}><span>{shareNotice}</span></div>}
 
       {result && (
-        <div className="finder-results" aria-live="polite">
-          {result.warning && <div className="finder-provider-warning" role="status">{result.warning}</div>}
-          <div className="finder-result-summary">
+        <div className="finder-results" id="finder-results" aria-live="polite">
+          <div className="result-summary">
             <div>
-              <p className="eyebrow"><span className="eyebrow-line" /> YOUR MATCHES</p>
-              <h3>{result.summary}</h3>
+              <h2>{result.needsClarification ? 'Tell us a bit more' : result.matches.length ? `${result.matches.length} car${result.matches.length === 1 ? '' : 's'} match your search` : 'No exact matches — here are close options'}</h2>
+              <p>{result.needsClarification ? result.clarificationQuestion : `For “${query}”`}</p>
             </div>
           </div>
-          {result.needsClarification ? (
-            <div className="finder-clarification" role="status">{result.clarificationQuestion}</div>
-          ) : (
+          {!result.needsClarification && (
             <>
-              {result.criteria?.mustHave?.length > 0 && (
-                <div className="finder-criteria">
-                  <span>YOUR PREFERENCES</span>
-                  {result.criteria.mustHave.map((criterion) => <span className="finder-criterion" key={criterion}>{criterion}</span>)}
-                  {result.criteria.preferences?.map((preference) => (
-                    <span className="finder-preference" key={preference}>Priority: {preference.replaceAll('_', ' ')}</span>
-                  ))}
-                  {result.criteria.excluded?.map((constraint) => <span className="finder-criterion" key={constraint}>{constraint}</span>)}
+              {(result.criteria?.mustHave?.length > 0 || result.criteria?.preferences?.length > 0) && (
+                <div className="criteria">
+                  {result.criteria.mustHave?.map((criterion) => <span className="badge" key={criterion}>{criterion}</span>)}
+                  {result.criteria.preferences?.map((preference) => <span className="badge badge-accent" key={preference}>Prefers {preference.replaceAll('_', ' ')}</span>)}
                 </div>
               )}
-              {result.matches.length > 0 && (
-                <>
-                  <div className="finder-results-header">
-                    <h3>Exact matches <span>{result.matches.length}</span></h3>
-                    <span>Ranked by recorded specifications and your stated priorities.</span>
-                  </div>
-                  <div className="finder-grid">{result.matches.map(recommendationCard)}</div>
-                </>
-              )}
+              {result.matches.length > 0 && <div className="vehicle-grid">{result.matches.map(recommendationCard)}</div>}
               {result.alternatives.length > 0 && (
                 <>
-                  <div className="finder-results-header alternatives-heading">
-                    <h3>No exact match <span>Consider relaxing one filter</span></h3>
-                    <span>Each option relaxes only its labeled requirement; other hard constraints stay applied.</span>
-                  </div>
-                  <div className="finder-grid">{result.alternatives.map(recommendationCard)}</div>
+                  <h3 className="result-group-title">Worth considering <small>Each of these differs from your search in one way</small></h3>
+                  <div className="vehicle-grid">{result.alternatives.map(recommendationCard)}</div>
                 </>
               )}
               {!result.matches.length && !result.alternatives.length && (
-                <div className="finder-clarification" role="status">
-                  No available inventory matches these interpreted requirements. Try a different budget, category, or specification.
+                <div className="card empty">
+                  <div className="empty-icon"><Search size={24} /></div>
+                  <h3>No cars match that search yet</h3>
+                  <p>Try a different budget or body style, or browse the full showroom below.</p>
                 </div>
               )}
             </>
           )}
-
         </div>
       )}
 
       {comparison && (
-        <div className="finder-comparison" id="comparison" aria-live="polite">
-          <div className="finder-results-header">
-            <h3>Side-by-side <span>comparison</span></h3>
-            <button className="finder-secondary" type="button" onClick={() => setComparison(null)}>Close comparison</button>
+        <div className="comparison" id="comparison" aria-live="polite">
+          <div className="result-summary">
+            <div><h2>Side-by-side comparison</h2>{comparison.summary && <p>{comparison.summary}</p>}</div>
+            <button className="btn btn-secondary btn-sm" type="button" onClick={() => setComparison(null)}>Close</button>
           </div>
-          <p className="finder-comparison-summary">{comparison.summary}</p>
-          <div className="comparison-table-wrap">
-            <table className="comparison-table">
-              <thead><tr><th scope="col">Specification</th>{comparison.vehicles.map((vehicle) => <th scope="col" key={vehicle.id}>{vehicle.make} {vehicle.model}</th>)}</tr></thead>
+          <div className="table-wrap">
+            <table className="table">
+              <thead><tr><th scope="col">&nbsp;</th>{comparison.vehicles.map((vehicle) => <th scope="col" key={vehicle.id}>{vehicle.make} {vehicle.model}</th>)}</tr></thead>
               <tbody>
-                {comparison.rows.map((row) => (
+                {comparison.rows.filter((row) => row.key !== 'make').map((row) => (
                   <tr key={row.key}>
-                    <th scope="row">{row.label}</th>
+                    <th scope="row">{row.label.replace(' (INR)', '')}</th>
                     {row.values.map((value, index) => (
-                      <td key={`${row.key}-${comparison.vehicles[index].id}`}>
-                        {row.key === 'price' ? money(value) : value === null ? 'Not recorded' : String(value)}
+                      <td key={`${row.key}-${comparison.vehicles[index].id}`} style={{ textTransform: 'capitalize' }}>
+                        {row.key === 'price' ? money(value) : value === null ? '—' : String(value)}
                       </td>
                     ))}
                   </tr>
@@ -357,47 +281,48 @@ export function AICarFinder({ session, onPurchase, onUnauthorized }) {
               </tbody>
             </table>
           </div>
-          <p className="comparison-footnote">Only specifications recorded in the current catalogue are compared. No overall winner is assumed.</p>
         </div>
       )}
 
       {details && (
         <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setDetails(null); }}>
-          <div className="finder-details" ref={detailsDialogRef} role="dialog" aria-modal="true" aria-labelledby="finder-details-title" tabIndex="-1">
-            <div className="editor-header">
-              <p className="eyebrow"><span className="eyebrow-line" /> CURRENT CATALOGUE DATA</p>
-              <button className="icon-button" type="button" aria-label="Close vehicle details" onClick={() => setDetails(null)}><X size={19} /></button>
+          <div className="modal" ref={detailsDialogRef} role="dialog" aria-modal="true" aria-labelledby="finder-details-title" tabIndex="-1">
+            <div className="modal-head">
+              <div>
+                <h2 id="finder-details-title">{details.vehicle.make} {details.vehicle.model}</h2>
+                <p>{details.vehicle.category} · {money(details.vehicle.price)}</p>
+              </div>
+              <button className="icon-btn" type="button" aria-label="Close" onClick={() => setDetails(null)}><X size={18} /></button>
             </div>
-            <h3 id="finder-details-title">{details.vehicle.make} {details.vehicle.model}</h3>
-            <p className="finder-price">{money(details.vehicle.price)}</p>
-            <dl className="finder-spec-list">
-              {Object.entries(details.vehicle.specifications || {}).map(([key, value]) => (
-                <div key={key}><dt>{key.replace(/([A-Z])/g, ' $1').replaceAll('_', ' ')}</dt><dd>{value === null ? 'Not recorded' : String(value)}</dd></div>
-              ))}
+            <dl className="spec-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+              {Object.entries(details.vehicle.specifications || {})
+                .map(([key, value]) => [key, formatSpec(key, value)])
+                .filter(([, value]) => value)
+                .map(([key, value]) => <div key={key}><dt>{SPEC_LABELS[key] || key}</dt><dd>{value}</dd></div>)}
             </dl>
-            {details.tradeOffs?.map((tradeOff) => <p className="finder-detail-note" key={tradeOff}>{tradeOff}</p>)}
-            <button
-              className="finder-submit"
-              type="button"
-              disabled={details.vehicle.quantity < 1}
-              onClick={() => purchaseRecommendation(details.vehicle)}
-            >
-              {details.vehicle.quantity < 1 ? 'Sold out' : 'Purchase'}
-            </button>
+            {details.tradeOffs?.length > 0 && <ul className="match-tradeoffs" style={{ marginTop: 16 }}>{details.tradeOffs.map((tradeOff) => <li key={tradeOff}>{tradeOff}</li>)}</ul>}
+            <div className="modal-foot">
+              <button className="btn btn-secondary" type="button" onClick={() => setDetails(null)}>Close</button>
+              <button className="btn btn-primary" type="button" disabled={details.vehicle.quantity < 1} onClick={() => purchaseRecommendation(details.vehicle)}>
+                {details.vehicle.quantity < 1 ? 'Sold out' : <>Reserve this car <ArrowRight size={16} /></>}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {selectedIds.length > 0 && (
-        <div className="compare-dock" role="region" aria-label="Vehicle comparison selection">
-          <div className="compare-dock-copy">
-            <span>{selectedIds.length}/3 SELECTED</span>
-            <strong>{selectedVehicles.join(' · ') || 'Select another vehicle to compare'}</strong>
+        <div className="compare-dock" role="region" aria-label="Compare cars">
+          <div>
+            <small>{selectedIds.length} of 3 selected</small>
+            <strong>{selectedIds.length < 2 ? 'Select one more car to compare' : selectedNames.join(' vs ')}</strong>
           </div>
-          <button type="button" disabled={selectedIds.length < 2 || comparing} onClick={compareSelected}>
-            {comparing ? 'Comparing…' : `Compare ${selectedIds.length} vehicles`}
-            <ArrowUpRight size={16} />
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-ghost btn-sm" style={{ color: '#fff' }} type="button" onClick={() => setSelectedIds([])}>Clear</button>
+            <button className="btn btn-primary btn-sm" type="button" disabled={selectedIds.length < 2 || comparing} onClick={compareSelected}>
+              {comparing ? 'Comparing…' : 'Compare'} <ArrowRight size={14} />
+            </button>
+          </div>
         </div>
       )}
     </section>

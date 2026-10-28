@@ -1,53 +1,65 @@
 import React from 'react';
-import { ArrowUpRight, CarFront, Gauge, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowRight, Fuel, Pencil, Settings2, Trash2, Users } from 'lucide-react';
 import { money } from '../../lib/currency-format.js';
+import { VehicleImage } from '../../components/VehicleImage.jsx';
+import { stockBadge, titleCase } from '../../lib/vehicle-labels.js';
 
-export function VehicleCard({ vehicle, index, isAdmin, busy, onPurchase, onEdit, onDelete, onDetails }) {
+export function VehicleCard({ vehicle, isAdmin, busy, onPurchase, onEdit, onDelete, navigate }) {
   const soldOut = vehicle.quantity === 0;
-  const variant = index % 4;
+  const badge = stockBadge(vehicle);
+  const detailPath = `/vehicles/${encodeURIComponent(vehicle.id)}`;
+  const title = `${vehicle.make} ${vehicle.model}`;
+  const openDetails = (event) => {
+    if (isAdmin || !navigate) return;
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    navigate(detailPath);
+  };
+  const specs = [
+    vehicle.fuelType && [Fuel, titleCase(vehicle.fuelType)],
+    vehicle.transmission && [Settings2, titleCase(vehicle.transmission)],
+    vehicle.seatingCapacity && [Users, `${vehicle.seatingCapacity} seats`],
+  ].filter(Boolean);
+
+  const media = (
+    <VehicleImage vehicle={vehicle} alt={title}>
+      <span className={badge.tone}>{badge.label}</span>
+      <span className="badge badge-dark vehicle-category">{vehicle.category}</span>
+    </VehicleImage>
+  );
 
   return (
-    <article className={`vehicle-card ${variant === 1 ? 'vehicle-card-sand' : ''} ${variant === 2 ? 'vehicle-card-blue' : ''}`}>
-      <div className={`vehicle-artwork artwork-${variant}`}>
-        <span className="vehicle-stock">{vehicle.status === 'unlisted' ? 'UNLISTED' : soldOut ? 'SOLD OUT' : `${String(vehicle.quantity).padStart(2, '0')} AVAILABLE`}</span>
-        {vehicle.imageUrl ? <img className="vehicle-photo" src={vehicle.imageUrl} alt={`${vehicle.make} ${vehicle.model}`} loading="lazy" /> : (
-          <>
-            <div className="vehicle-art-circle" />
-            <CarFront className="vehicle-illustration" strokeWidth={0.85} aria-hidden="true" />
-            <span className="vehicle-art-label">Photo coming soon</span>
-          </>
+    <article className="vehicle-card">
+      {isAdmin ? media : <a href={detailPath} onClick={openDetails} aria-label={`View ${title}`}>{media}</a>}
+      <div className="vehicle-body">
+        <span className="vehicle-make">{[vehicle.year, vehicle.make].filter(Boolean).join(' · ')}</span>
+        <h3 className="vehicle-title">{isAdmin ? vehicle.model : <a href={detailPath} onClick={openDetails}>{vehicle.model}</a>}</h3>
+        {vehicle.variant && <span className="vehicle-variant">{vehicle.variant}</span>}
+        {specs.length > 0 && (
+          <ul className="spec-list">
+            {specs.map(([Icon, label]) => <li key={label}><Icon size={14} /> {label}</li>)}
+          </ul>
         )}
-      </div>
-      <div className="vehicle-details">
-        <div className="vehicle-heading">
+        <div className="vehicle-foot">
           <div>
-            <span className="vehicle-make">{[vehicle.year, vehicle.make, vehicle.variant].filter(Boolean).join(' · ')}</span>
-            <h3>{vehicle.model}</h3>
+            <span className="price-label">{isAdmin ? `${vehicle.quantity} in stock` : 'Ex-showroom'}</span>
+            <span className="price">{money(vehicle.price)}</span>
           </div>
-          <span className="category-pill">{vehicle.category}</span>
-        </div>
-        <div className="vehicle-spec-row">
-          <span><Gauge size={15} /> {vehicle.fuelType || 'Fuel details on request'}</span>
-          <span><CarFront size={15} /> {vehicle.transmission || vehicle.category}</span>
-        </div>
-        {!isAdmin && <button className="vehicle-details-link" type="button" onClick={onDetails}>View vehicle details <ArrowUpRight size={15} /></button>}
-        <div className="vehicle-card-footer">
-          <div><span className="price-caption">PRICE</span><span className="vehicle-price">{money(vehicle.price)}</span></div>
           {!isAdmin && (
             <button
-              className={`purchase-button ${soldOut ? 'purchase-disabled' : ''}`}
+              className="btn btn-dark btn-sm"
               type="button"
               disabled={soldOut || busy || vehicle.status === 'unlisted'}
               onClick={() => onPurchase(vehicle)}
             >
-              {busy ? <span className="loading-spinner spinner-small" /> : vehicle.status === 'unlisted' ? 'Unlisted' : soldOut ? 'Sold out' : <>Request car <ArrowUpRight size={15} /></>}
+              {busy ? <span className="spinner spinner-sm" /> : soldOut ? 'Sold out' : <>Reserve <ArrowRight size={14} /></>}
             </button>
           )}
         </div>
         {isAdmin && (
-          <div className="vehicle-admin-actions">
-            <button type="button" onClick={onEdit}><SlidersHorizontal size={14} /> Edit details & stock</button>
-            <button type="button" onClick={() => onDelete(vehicle)}><X size={14} /> Remove</button>
+          <div className="vehicle-admin">
+            <button className="btn btn-secondary btn-sm" type="button" onClick={onEdit}><Pencil size={14} /> Edit</button>
+            <button className="btn btn-danger btn-sm" type="button" disabled={busy} onClick={() => onDelete(vehicle)}><Trash2 size={14} /> Remove</button>
           </div>
         )}
       </div>

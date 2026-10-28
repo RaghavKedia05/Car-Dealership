@@ -1,13 +1,13 @@
 import React from 'react';
-import { CircleHelp, X } from 'lucide-react';
+import { AlertCircle, X } from 'lucide-react';
 
 export function GlobalErrorToast({ notification, onDismiss }) {
   if (!notification) return null;
   return (
-    <div className="global-error-toast" role="alert" aria-live="assertive">
-      <CircleHelp size={18} />
+    <div className="toast" role="alert" aria-live="assertive">
+      <AlertCircle size={18} />
       <span>{notification.message}</span>
-      <button type="button" aria-label="Dismiss error notification" onClick={onDismiss}><X size={16} /></button>
+      <button type="button" aria-label="Dismiss" onClick={onDismiss}><X size={16} /></button>
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowUpRight, CarFront, Check, LockKeyhole } from 'lucide-react';
+import { ArrowRight, CarFront, Check, CircleAlert, LockKeyhole } from 'lucide-react';
 import { money } from '../../lib/currency-format.js';
+
+const TABS = [['overview', 'Overview'], ['orders', 'My orders'], ['profile', 'Profile'], ['security', 'Password']];
 
 export function CustomerDashboard({ api, user, onUserUpdated, onPasswordChanged, navigate }) {
   const [tab, setTab] = useState('overview');
@@ -42,7 +44,7 @@ export function CustomerDashboard({ api, user, onUserUpdated, onPasswordChanged,
       });
       setProfile(result.user);
       onUserUpdated(result.user);
-      setNotice('Your contact details have been saved.');
+      setNotice('Your profile has been saved.');
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -55,7 +57,7 @@ export function CustomerDashboard({ api, user, onUserUpdated, onPasswordChanged,
     setError('');
     setNotice('');
     if (newPassword !== confirmPassword) {
-      setError('The new passwords do not match.');
+      setError('The new passwords don’t match.');
       return;
     }
     setSavingPassword(true);
@@ -68,7 +70,7 @@ export function CustomerDashboard({ api, user, onUserUpdated, onPasswordChanged,
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setNotice('Password changed. Other signed-in sessions were signed out.');
+      setNotice('Password updated. You’ve been signed out on other devices.');
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -77,82 +79,94 @@ export function CustomerDashboard({ api, user, onUserUpdated, onPasswordChanged,
   }
 
   const completedOrders = orders.filter((order) => order.status === 'paid');
-  const openOrders = orders.filter((order) => ['pending', 'refunding', 'refunded'].includes(order.status));
+  const pendingOrders = orders.filter((order) => order.status === 'pending');
+  const profileComplete = Boolean(profile.phone && profile.deliveryAddress);
 
   return (
-    <section className="customer-dashboard" aria-labelledby="customer-dashboard-title">
-      <div className="customer-dashboard-heading">
+    <section className="container page" aria-labelledby="customer-dashboard-title">
+      <div className="page-head">
         <div>
-          <p className="eyebrow"><span className="eyebrow-line" /> YOUR APEX AUTO ACCOUNT</p>
-          <h1 id="customer-dashboard-title">Welcome back, <span>{profile.name?.split(' ')[0] || 'driver'}.</span></h1>
-          <p>Keep your vehicle orders and contact details together in one place.</p>
+          <p className="eyebrow">My account</p>
+          <h1 className="page-title" id="customer-dashboard-title">Welcome back, {profile.name?.split(' ')[0] || 'there'}</h1>
+          <p className="page-lede">Track your reservations and keep your details up to date.</p>
         </div>
-        <button className="public-button" type="button" onClick={() => navigate('/showroom')}>Browse the showroom <ArrowUpRight size={15} /></button>
+        <button className="btn btn-dark" type="button" onClick={() => navigate('/showroom')}>Browse cars <ArrowRight size={16} /></button>
       </div>
 
-      <nav className="customer-account-tabs" aria-label="Account sections">
-        {[
-          ['overview', 'Overview'], ['orders', 'My orders'], ['profile', 'Contact details'], ['security', 'Security'],
-        ].map(([value, label]) => (
+      <nav className="tabs" aria-label="Account sections">
+        {TABS.map(([value, label]) => (
           <button key={value} type="button" className={tab === value ? 'active' : ''} aria-current={tab === value ? 'page' : undefined} onClick={() => { setTab(value); setError(''); setNotice(''); }}>{label}</button>
         ))}
       </nav>
 
-      {error && <div className="customer-account-alert" role="alert">{error}</div>}
-      {notice && <div className="customer-account-success" role="status"><Check size={16} /> {notice}</div>}
-      {loading ? <div className="customer-account-loading"><span className="loading-spinner" /> Loading your account…</div> : (
+      {error && <div className="alert alert-error" role="alert" style={{ marginBottom: 16 }}><CircleAlert size={16} /><span>{error}</span></div>}
+      {notice && <div className="alert alert-success" role="status" style={{ marginBottom: 16 }}><Check size={16} /><span>{notice}</span></div>}
+
+      {loading ? <div className="loading-block"><span className="spinner" /> Loading your account…</div> : (
         <>
           {tab === 'overview' && (
-            <div className="customer-account-overview">
-              <div className="customer-account-metrics">
-                <article><span>COMPLETED PURCHASES</span><strong>{completedOrders.length}</strong><small>Verified and recorded</small></article>
-                <article><span>ORDERS AWAITING PAYMENT</span><strong>{openOrders.filter((order) => order.status === 'pending').length}</strong><small>The dealership will confirm payment arrangements</small></article>
-                <article><span>CONTACT DETAILS</span><strong>{profile.phone ? 'Ready' : 'Add phone'}</strong><small>{profile.deliveryAddress ? 'Delivery address saved' : 'Save an address for checkout'}</small></article>
+            <>
+              <div className="stat-grid">
+                <article className="card stat"><span>Reservations in progress</span><strong>{pendingOrders.length}</strong><small>Our team will confirm with you</small></article>
+                <article className="card stat"><span>Completed purchases</span><strong>{completedOrders.length}</strong><small>Payment confirmed</small></article>
+                <article className="card stat"><span>Profile</span><strong>{profileComplete ? 'Complete' : 'Incomplete'}</strong><small>{profileComplete ? 'Ready for quick checkout' : 'Add phone & address for faster checkout'}</small></article>
               </div>
-              <div className="customer-account-panels">
-                <section className="customer-account-panel">
-                  <div className="customer-account-panel-heading"><div><p className="eyebrow">RECENT ACTIVITY</p><h2>Your latest <span>orders.</span></h2></div><button type="button" onClick={() => setTab('orders')}>View all <ArrowUpRight size={14} /></button></div>
-                  {orders.length ? orders.slice(0, 3).map((order) => <CustomerOrderRow key={order.id} order={order} compact />) : <p className="customer-account-empty">No vehicle orders yet. Your confirmed purchases will appear here.</p>}
+              <div className="two-col">
+                <section className="card panel">
+                  <div className="panel-head"><div><h2>Recent orders</h2></div>{orders.length > 0 && <button className="link-btn" type="button" onClick={() => setTab('orders')}>View all</button>}</div>
+                  {orders.length ? orders.slice(0, 3).map((order) => <CustomerOrderRow key={order.id} order={order} compact />) : (
+                    <div className="empty" style={{ padding: '24px 0' }}>
+                      <div className="empty-icon"><CarFront size={24} /></div>
+                      <p>You haven’t reserved a car yet.</p>
+                      <button className="btn btn-secondary btn-sm" type="button" onClick={() => navigate('/showroom')}>Find a car</button>
+                    </div>
+                  )}
                 </section>
-                <section className="customer-account-panel customer-account-contact-card">
-                  <p className="eyebrow">YOUR CONTACT CARD</p><h2>{profile.name}</h2><p>{profile.email}</p><p>{profile.phone || 'Phone number not added'}</p><p>{profile.deliveryAddress || 'Delivery address not added'}</p><button type="button" onClick={() => setTab('profile')}>Update details <ArrowUpRight size={14} /></button>
+                <section className="card panel profile-card">
+                  <div className="panel-head"><h2>Your details</h2><button className="link-btn" type="button" onClick={() => setTab('profile')}>Edit</button></div>
+                  <dl>
+                    <div><dt>Name</dt><dd>{profile.name}</dd></div>
+                    <div><dt>Email</dt><dd>{profile.email}</dd></div>
+                    <div><dt>Phone</dt><dd className={profile.phone ? '' : 'missing'}>{profile.phone || 'Not added'}</dd></div>
+                    <div><dt>Delivery address</dt><dd className={profile.deliveryAddress ? '' : 'missing'}>{profile.deliveryAddress || 'Not added'}</dd></div>
+                  </dl>
                 </section>
               </div>
-            </div>
+            </>
           )}
 
           {tab === 'orders' && (
-            <section className="customer-account-panel customer-orders-panel">
-              <div className="customer-account-panel-heading"><div><p className="eyebrow">ORDER HISTORY</p><h2>Vehicles you’ve <span>reserved.</span></h2></div><span>{orders.length} {orders.length === 1 ? 'order' : 'orders'}</span></div>
-              {orders.length ? orders.map((order) => <CustomerOrderRow key={order.id} order={order} />) : <p className="customer-account-empty">There are no orders on this account yet. When you purchase a vehicle, its payment and delivery details will appear here.</p>}
+            <section className="card panel">
+              <div className="panel-head"><div><h2>Order history</h2><p>{orders.length} {orders.length === 1 ? 'order' : 'orders'}</p></div></div>
+              {orders.length ? orders.map((order) => <CustomerOrderRow key={order.id} order={order} />) : <p className="panel-empty">No orders yet. When you reserve a car, it will appear here.</p>}
             </section>
           )}
 
           {tab === 'profile' && (
-            <form className="customer-account-panel customer-profile-form" onSubmit={saveProfile}>
-              <div className="customer-account-panel-heading"><div><p className="eyebrow">BUYER INFORMATION</p><h2>Contact <span>details.</span></h2></div></div>
-              <p className="customer-account-help">These details make vehicle enquiries and checkout faster. Your email is your sign-in address.</p>
-              <div className="customer-profile-grid">
-                <label>Full name<input required minLength="2" maxLength="80" autoComplete="name" value={profile.name || ''} onChange={(event) => setProfile((current) => ({ ...current, name: event.target.value }))} /></label>
-                <label>Email address<input value={profile.email || ''} readOnly disabled /></label>
-                <label>Phone number<input type="tel" maxLength="20" autoComplete="tel" placeholder="Include country code" value={profile.phone || ''} onChange={(event) => setProfile((current) => ({ ...current, phone: event.target.value }))} /></label>
-                <label className="customer-profile-address">Delivery address<textarea rows="4" maxLength="500" autoComplete="street-address" placeholder="Flat or house, street, city, state and PIN code" value={profile.deliveryAddress || ''} onChange={(event) => setProfile((current) => ({ ...current, deliveryAddress: event.target.value }))} /></label>
+            <form className="card panel form-panel" onSubmit={saveProfile}>
+              <div className="panel-head"><div><h2>Profile</h2><p>Saved details are used to pre-fill your reservations.</p></div></div>
+              <div className="form-grid">
+                <label className="field">Full name<input required minLength="2" maxLength="80" autoComplete="name" value={profile.name || ''} onChange={(event) => setProfile((current) => ({ ...current, name: event.target.value }))} /></label>
+                <label className="field">Email<input value={profile.email || ''} readOnly disabled /></label>
+                <label className="field span-2">Phone<input type="tel" maxLength="20" autoComplete="tel" placeholder="+91 98765 43210" value={profile.phone || ''} onChange={(event) => setProfile((current) => ({ ...current, phone: event.target.value }))} /></label>
+                <label className="field span-2">Delivery address<textarea rows="3" maxLength="500" autoComplete="street-address" placeholder="House / flat, street, city, state, PIN code" value={profile.deliveryAddress || ''} onChange={(event) => setProfile((current) => ({ ...current, deliveryAddress: event.target.value }))} /></label>
               </div>
-              <button className="public-button" type="submit" disabled={savingProfile}>{savingProfile ? 'Saving…' : 'Save contact details'} <Check size={15} /></button>
+              <button className="btn btn-primary" type="submit" disabled={savingProfile}>{savingProfile ? 'Saving…' : 'Save changes'}</button>
             </form>
           )}
 
           {tab === 'security' && (
-            <div className="customer-account-panel customer-security-panel">
-              <p className="eyebrow">ACCOUNT SECURITY</p><h2>Keep your account <span>safe.</span></h2>
-              <p className="customer-account-help">Change your password here. If you can’t sign in, request a time-limited reset link by email.</p>
-              <form className="customer-password-form" onSubmit={changePassword}>
-                <label>Current password<input required type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>
-                <label>New password<input required type="password" minLength="12" maxLength="72" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="At least 12 characters" /></label>
-                <label>Confirm new password<input required type="password" minLength="12" maxLength="72" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
-                <button className="public-button" type="submit" disabled={savingPassword}>{savingPassword ? 'Updating…' : 'Change password'} <LockKeyhole size={15} /></button>
+            <div className="card panel form-panel">
+              <div className="panel-head"><div><h2>Change password</h2><p>Use at least 12 characters.</p></div></div>
+              <form className="form-stack" onSubmit={changePassword}>
+                <label className="field">Current password<input required type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>
+                <label className="field">New password<input required type="password" minLength="12" maxLength="72" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label>
+                <label className="field">Confirm new password<input required type="password" minLength="12" maxLength="72" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16 }}>
+                  <button className="btn btn-primary" type="submit" disabled={savingPassword}><LockKeyhole size={15} /> {savingPassword ? 'Updating…' : 'Update password'}</button>
+                  <button className="link-btn" type="button" onClick={() => navigate(`/forgot-password?email=${encodeURIComponent(profile.email || '')}`)}>Forgot your current password?</button>
+                </div>
               </form>
-              <div className="customer-recovery-link"><span>Forgot your current password?</span><button type="button" onClick={() => navigate(`/forgot-password?email=${encodeURIComponent(profile.email || '')}`)}>Email me a reset link</button></div>
             </div>
           )}
         </>
@@ -161,19 +175,34 @@ export function CustomerDashboard({ api, user, onUserUpdated, onPasswordChanged,
   );
 }
 
+const STATUS = {
+  paid: ['Purchased', 'badge badge-success'],
+  pending: ['Reserved · awaiting confirmation', 'badge badge-warning'],
+  cancelled: ['Cancelled', 'badge'],
+  refunding: ['Refund in progress', 'badge badge-warning'],
+  refunded: ['Refunded', 'badge'],
+  expired: ['Reservation expired', 'badge'],
+};
+const PAYMENT = { dealership: 'Pay at dealership', callback: 'Call back requested', legacy_online: 'Paid online' };
+
 export function CustomerOrderRow({ order, compact = false }) {
-  const statusLabels = { paid: 'Payment confirmed', pending: 'Order placed · payment pending', cancelled: 'Order cancelled', refunding: 'Refund processing', refunded: 'Refunded', expired: 'Reservation expired' };
-  const paymentLabels = { dealership: 'Pay at the dealership', callback: 'Payment callback requested', legacy_online: 'Online payment (legacy order)' };
+  const [label, tone] = STATUS[order.status] || [order.status, 'badge'];
   return (
-    <article className={`customer-order-row ${compact ? 'compact' : ''}`}>
-      <div className="customer-order-vehicle">
-        {order.vehicle.imageUrl ? <img src={order.vehicle.imageUrl} alt="" loading="lazy" /> : <span className="customer-order-placeholder"><CarFront size={22} /></span>}
-        <div><strong>{order.vehicle.year ? `${order.vehicle.year} ` : ''}{order.vehicle.make} {order.vehicle.model}</strong><small>Order {order.id.slice(0, 8).toUpperCase()} · {new Date(order.createdAt).toLocaleDateString()}</small></div>
+    <article className="order-row">
+      <div className="thumb">{order.vehicle.imageUrl ? <img src={order.vehicle.imageUrl} alt="" loading="lazy" /> : <CarFront size={22} />}</div>
+      <div className="order-main">
+        <strong>{order.vehicle.year ? `${order.vehicle.year} ` : ''}{order.vehicle.make} {order.vehicle.model}</strong>
+        <small>#{order.id.slice(0, 8).toUpperCase()} · {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</small>
+        {!compact && (
+          <div className="order-extra">
+            {order.paymentMethod && <span>{PAYMENT[order.paymentMethod] || order.paymentMethod}</span>}
+            {order.deliveryAddress && <span>Deliver to: {order.deliveryAddress}</span>}
+          </div>
+        )}
       </div>
-      <div className="customer-order-details">
-        <span className={`customer-order-status status-${order.status}`}>{statusLabels[order.status] || order.status}</span>
+      <div className="order-side">
+        <span className={tone}>{label}</span>
         <strong>{money(order.totalAmount)}</strong>
-        {!compact && <><small>{order.phone} · {order.email}</small><small>{order.deliveryAddress}</small>{order.paymentMethod && <small>Payment: {paymentLabels[order.paymentMethod] || order.paymentMethod}</small>}{order.paymentId && <small>Payment reference: {order.paymentId}</small>}</>}
       </div>
     </article>
   );

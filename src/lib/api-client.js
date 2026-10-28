@@ -1,5 +1,3 @@
-import { Check } from 'lucide-react';
-
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
 export function apiUrl(path) {
@@ -8,7 +6,7 @@ export function apiUrl(path) {
 
 export function reportError(error) {
   const message = error instanceof TypeError
-    ? 'Could not connect to the dealership server. Check your internet connection and make sure the API service is running.'
+    ? 'We can’t connect right now. Please check your internet connection and try again.'
     : error.message || 'Something went wrong. Please try again.';
   window.dispatchEvent(new CustomEvent('app-error', { detail: message }));
 }
@@ -21,12 +19,9 @@ export async function parseApiResponse(response, fallbackMessage) {
   try {
     body = JSON.parse(responseText);
   } catch {
-    const endpoint = response.url
-      ? new URL(response.url).pathname
-      : 'the API endpoint';
-    const requestError = new Error(
-      `The request to ${endpoint} returned HTTP ${response.status} with a non-JSON response. The request may be reaching a static frontend instead of the dealership API. Ensure /api and /healthz are routed to the Express server, or serve the frontend and API from the same app.`,
-    );
+    // Keep the technical detail in the console for developers, show a friendly message to users.
+    console.error(`Unexpected non-JSON response (HTTP ${response.status}) from ${response.url || 'API'}`);
+    const requestError = new Error('Our service is temporarily unavailable. Please try again in a moment.');
     requestError.status = response.status;
     reportError(requestError);
     throw requestError;
@@ -37,12 +32,13 @@ export async function parseApiResponse(response, fallbackMessage) {
       ? body.details.map((detail) => detail.message).filter(Boolean).join('. ')
       : '';
     const requestError = new Error(
-      [body?.error || fallbackMessage, details && body?.error === 'Invalid request' ? details : '']
-        .filter(Boolean)
-        .join(': '),
+      body?.error === 'Invalid request' && details
+        ? details
+        : body?.error || fallbackMessage,
     );
     requestError.status = response.status;
-    reportError(requestError);
+    // Client errors (4xx) are shown inline next to the form that caused them; only surface server failures globally.
+    if (response.status >= 500) reportError(requestError);
     throw requestError;
   }
   return body;
