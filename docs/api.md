@@ -98,23 +98,15 @@ Returns `204` on deletion, `404` if missing, or `409` if purchase or checkout hi
 
 ### `POST /api/vehicles/{id}/checkout`
 
-Authenticated customer. Request buyer and delivery details (`customerName`, `email`, `phone`, `deliveryAddress`). The server reads the current listed vehicle price, reserves one unit for 15 minutes, and creates a Razorpay order. Returns `checkoutId`, Razorpay `orderId`, public `keyId`, amount in paise, currency, vehicle summary, and payment prefill details. Returns `409` if unavailable or `503` if payment credentials are not configured.
-
-### `POST /api/checkout/{id}/verify`
-
-Authenticated owner of the checkout. Request: `{ "paymentId": "pay_...", "signature": "..." }`. The server checks the Checkout HMAC and fetches the payment from Razorpay; only a captured payment matching the stored order and amount creates a purchase and completes the reservation. A captured payment for an expired or released reservation is refunded.
+Authenticated customer. Request buyer, delivery, and payment arrangement details: `{ "customerName": "Taylor Driver", "email": "taylor@example.com", "phone": "+1 555 0100", "deliveryAddress": "...", "paymentMethod": "dealership" }`. `paymentMethod` is `dealership` or `callback`. The server reads the current listed vehicle price, reserves one unit for up to 24 hours, and returns `201` with the pending order and updated vehicle. This records an order request only; it does not charge the customer or mark the order paid. Returns `409` if unavailable.
 
 ### `POST /api/checkout/{id}/cancel`
 
 Authenticated owner of the checkout. Releases the reserved unit if the checkout is still pending. Returns `204`.
 
-### `POST /api/payments/razorpay/webhook`
-
-Razorpay webhook endpoint. Verify `payment.captured` and `payment.failed` with `RAZORPAY_WEBHOOK_SECRET`. Configure this endpoint in Razorpay Dashboard for recovery when a browser closes before payment confirmation.
-
 ### `POST /api/vehicles/{id}/purchase` (retired)
 
-Returns `410`. Purchases must use the verified checkout flow; direct stock decrement is disabled.
+Returns `410`. Submit an order through the checkout flow; direct stock decrement is disabled.
 
 ### `POST /api/vehicles/{id}/restock` — administrator
 
@@ -145,6 +137,8 @@ Returns `201` with the enquiry ID and initial status. `submissionKey` is a clien
 All administrator routes require an administrator token.
 
 - `GET /api/admin/dashboard` returns database-backed inventory and enquiry metrics, grouped inventory, and recent records.
+- `GET /api/admin/orders` returns up to 50 pending vehicle order requests with customer contact and delivery details.
+- `PATCH /api/admin/orders/{id}` accepts `{ "status": "paid" }` only after the dealership receives payment, or `{ "status": "cancelled" }` to release the stock reservation. Paid orders are added to the customer's purchase history.
 - `GET /api/admin/enquiries` accepts `status`, `search`, `page`, and `pageSize` filters and returns paginated enquiries.
 - `GET /api/admin/enquiries/{id}` reads one enquiry.
 - `PATCH /api/admin/enquiries/{id}` accepts `{ "status": "contacted" }`; supported states are `new`, `contacted`, `in_progress`, and `resolved`.
@@ -178,9 +172,8 @@ Migration 004 converts earlier USD inventory prices and purchase snapshots into 
 - `403`: authenticated user lacks administrator privileges.
 - `404`: requested API route or resource does not exist.
 - `409`: email conflict, insufficient stock, or a vehicle with purchase history.
-- `410`: retired direct-purchase endpoint; use the verified checkout routes.
+- `410`: retired direct-purchase endpoint; use the vehicle order checkout.
 - `429`: authentication or AI Car Finder rate limit exceeded.
-- `503`: payment checkout is not configured on the API host.
 - `500`: generic internal error; stack traces are not sent to clients.
 
 The static OpenAPI 3.0 contract is in [`openapi.yaml`](./openapi.yaml). Swagger UI is not bundled.

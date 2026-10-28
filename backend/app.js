@@ -5,19 +5,14 @@ const express = require('express');
 const { rateLimit } = require('express-rate-limit');
 const helmet = require('helmet');
 const jwt = require('jsonwebtoken');
-const {
-  isValidPaymentSignature,
-  isValidSignature,
-  paymentConfigured,
-  razorpayRequest,
-} = require('./payments');
+const { expireCheckoutOrders } = require('./services/order-reservations');
 const { z, ZodError } = require('zod');
 const {
   buildComparison,
   compareRequestSchema,
   findCars,
   finderRequestSchema,
-} = require('./ai-car-finder');
+} = require('./services/ai-car-finder');
 
 const passwordSchema = z.string().min(12).refine(
   (password) => Buffer.byteLength(password, 'utf8') <= 72,
@@ -111,11 +106,7 @@ const checkoutSchema = z.object({
   email: z.string().trim().email().max(254).transform((email) => email.toLowerCase()),
   phone: z.string().trim().min(7).max(20).regex(/^[+\d(). -]+$/),
   deliveryAddress: z.string().trim().min(8).max(500),
-});
-
-const paymentVerificationSchema = z.object({
-  paymentId: z.string().min(5).max(80),
-  signature: z.string().min(20).max(200),
+  paymentMethod: z.enum(['dealership', 'callback']),
 });
 
 const publicVehicleQuerySchema = vehicleQuerySchema.safeExtend({
@@ -144,6 +135,10 @@ const enquiryQuerySchema = z.object({
 
 const enquiryStatusSchema = z.object({
   status: z.enum(['new', 'contacted', 'in_progress', 'resolved']),
+});
+
+const dealershipOrderActionSchema = z.object({
+  status: z.enum(['paid', 'cancelled']),
 });
 
 function publicUser(user) {
@@ -320,8 +315,6 @@ function createApp({
     contentSecurityPolicy: {
       directives: {
         imgSrc: ["'self'", 'data:', 'https:'],
-        scriptSrc: ["'self'", 'https://checkout.razorpay.com'],
-        frameSrc: ["'self'", 'https://api.razorpay.com', 'https://checkout.razorpay.com'],
       },
     },
   }));
@@ -341,7 +334,6 @@ function createApp({
     if (req.method === 'OPTIONS') return res.status(204).end();
     return next();
   });
-  app.use('/api/payments/razorpay/webhook', express.raw({ type: 'application/json', limit: '64kb' }));
   app.use(express.json({ limit: '32kb' }));
 
   const authLimiter = rateLimit({
@@ -617,7 +609,7 @@ function createApp({
   app.get('/api/account/orders', requireAuth, async (req, res) => {
     const completed = await db.all(`
       SELECT p.id, p.total_amount AS unit_price, p.created_at, 'paid' AS status,
-             c.razorpay_payment_id, COALESCE(c.customer_name, u.name) AS customer_name,
+             c.razorpay_payment_id, c.payment_method, COALESCE(c.customer_name, u.name) AS customer_name,
              COALESCE(c.email, u.email) AS email, COALESCE(c.phone, u.phone, '') AS phone,
              COALESCE(c.delivery_address, u.delivery_address, '') AS delivery_address,
              v.id AS vehicle_id, v.make, v.model, v.vehicle_year, v.image_url
@@ -629,11 +621,11 @@ function createApp({
     `, req.user.id);
     const outstanding = await db.all(`
       SELECT c.id, c.vehicle_id, c.customer_name, c.email, c.phone, c.delivery_address,
-             c.unit_price, c.status, c.razorpay_payment_id, c.created_at,
+             c.unit_price, c.status, c.razorpay_payment_id, c.payment_method, c.created_at,
              v.make, v.model, v.vehicle_year, v.image_url
       FROM checkout_orders c
       JOIN vehicles v ON v.id = c.vehicle_id
-      WHERE c.user_id = ? AND c.status IN ('pending', 'refunded', 'refunding', 'expired')
+      WHERE c.user_id = ? AND c.status IN ('pending', 'cancelled', 'refunded', 'refunding', 'expired')
         AND NOT EXISTS (SELECT 1 FROM purchases p WHERE p.checkout_order_id = c.id)
     `, req.user.id);
     const rows = [...completed, ...outstanding].sort((left, right) => (
@@ -644,6 +636,7 @@ function createApp({
       status: row.status,
       totalAmount: row.unit_price,
       paymentId: row.razorpay_payment_id,
+      paymentMethod: row.payment_method || null,
       createdAt: row.created_at,
       customerName: row.customer_name,
       email: row.email,
@@ -915,105 +908,11 @@ function createApp({
     });
   }
 
-  async function refundPayment(paymentId, checkoutId) {
-    const existing = await db.get('SELECT status FROM checkout_orders WHERE id = ?', checkoutId);
-    if (!existing || existing.status === 'refunded' || existing.status === 'refunding') return;
-    const claimed = await db.run(
-      "UPDATE checkout_orders SET status = 'refunding' WHERE id = ? AND status IN ('expired', 'cancelled')",
-      checkoutId,
-    );
-    if (!claimed.changes) return;
-    try {
-      const payment = await razorpayRequest(`/payments/${encodeURIComponent(paymentId)}`);
-      if (payment.amount_refunded < payment.amount) {
-        await razorpayRequest(`/payments/${encodeURIComponent(paymentId)}/refund`, {
-          method: 'POST',
-          body: JSON.stringify({
-            amount: payment.amount,
-            notes: { checkout_id: checkoutId, reason: 'Checkout expired or stock reservation was released' },
-          }),
-        });
-      }
-      await db.run("UPDATE checkout_orders SET status = 'refunded' WHERE id = ? AND status = 'refunding'", checkoutId);
-    } catch (error) {
-      await db.run("UPDATE checkout_orders SET status = 'expired' WHERE id = ? AND status = 'refunding'", checkoutId);
-      throw error;
-    }
-  }
-
-  async function completeCheckout(checkout, payment) {
-    if (payment.order_id !== checkout.razorpay_order_id
-      || Number(payment.amount) !== Number(checkout.amount_minor)
-      || payment.currency !== 'INR'
-      || payment.status !== 'captured') {
-      throw new Error('Payment could not be confirmed as captured for this checkout');
-    }
-
-    const outcome = await db.transaction(async (tx) => {
-      const current = await tx.get('SELECT * FROM checkout_orders WHERE id = ?', checkout.id);
-      if (!current) return { state: 'missing' };
-      if (current.status === 'paid') {
-        const existingPurchase = await tx.get(
-          'SELECT id FROM purchases WHERE user_id = ? AND vehicle_id = ? ORDER BY created_at DESC LIMIT 1',
-          current.user_id,
-          current.vehicle_id,
-        );
-        return { state: 'paid', checkout: current, purchaseId: existingPurchase?.id || null };
-      }
-      if (current.status !== 'pending' || current.expires_at <= Date.now()) {
-        if (current.status === 'pending') {
-          await tx.run("UPDATE checkout_orders SET status = 'expired' WHERE id = ? AND status = 'pending'", current.id);
-          await tx.run('UPDATE vehicles SET quantity = quantity + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?', current.vehicle_id);
-        }
-        return { state: 'refund', checkout: current };
-      }
-
-      const claimed = await tx.run(
-        "UPDATE checkout_orders SET status = 'processing' WHERE id = ? AND status = 'pending'",
-        current.id,
-      );
-      if (!claimed.changes) {
-        const latest = await tx.get('SELECT * FROM checkout_orders WHERE id = ?', current.id);
-        if (latest?.status === 'paid') {
-          const existingPurchase = await tx.get(
-            'SELECT id FROM purchases WHERE user_id = ? AND vehicle_id = ? ORDER BY created_at DESC LIMIT 1',
-            latest.user_id,
-            latest.vehicle_id,
-          );
-          return { state: 'paid', checkout: latest, purchaseId: existingPurchase?.id || null };
-        }
-        return { state: 'refund', checkout: latest || current };
-      }
-
-      const purchaseId = randomUUID();
-      await tx.run(`
-        INSERT INTO purchases (id, vehicle_id, user_id, quantity, unit_price, total_amount, checkout_order_id)
-        VALUES (?, ?, ?, 1, ?, ?, ?)
-      `, purchaseId, current.vehicle_id, current.user_id, current.unit_price, current.unit_price, current.id);
-      await tx.run(`
-        UPDATE checkout_orders
-        SET status = 'paid', razorpay_payment_id = ?
-        WHERE id = ? AND status = 'processing'
-      `, payment.id, current.id);
-      return { state: 'paid', checkout: current, purchaseId };
-    });
-
-    if (outcome.state === 'refund') {
-      await refundPayment(payment.id, checkout.id);
-      return { state: 'refunded' };
-    }
-    if (outcome.state !== 'paid') return outcome;
-    const vehicle = toVehicle(await db.get('SELECT * FROM vehicles WHERE id = ?', outcome.checkout.vehicle_id));
-    return { state: 'paid', vehicle, purchaseId: outcome.purchaseId || null };
-  }
-
   app.post('/api/vehicles/:id/checkout', requireAuth, checkoutLimiter, async (req, res) => {
-    if (!paymentConfigured()) {
-      return res.status(503).json({ error: 'Online checkout is not configured yet. Please contact the dealership.' });
-    }
     const input = validate(checkoutSchema, req.body, res);
     if (!input) return;
 
+    await expireCheckoutOrders(db);
     const checkoutId = randomUUID();
     const now = Date.now();
     const checkout = await db.transaction(async (tx) => {
@@ -1033,70 +932,28 @@ function createApp({
       await tx.run(`
         INSERT INTO checkout_orders
           (id, vehicle_id, user_id, customer_name, email, phone, delivery_address,
-           unit_price, amount_minor, status, expires_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+           unit_price, amount_minor, status, payment_method, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
       `, checkoutId, vehicle.id, req.user.id, input.customerName, input.email, input.phone,
-      input.deliveryAddress, unitPrice, amountMinor, now + 15 * 60 * 1000);
+      input.deliveryAddress, unitPrice, amountMinor, input.paymentMethod, now + 24 * 60 * 60 * 1000);
       await tx.run(`
         UPDATE users SET name = ?, phone = ?, delivery_address = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `, input.customerName, input.phone, input.deliveryAddress, req.user.id);
-      return { ...vehicle, price: unitPrice, amountMinor };
+      return { ...vehicle, price: unitPrice, paymentMethod: input.paymentMethod };
     });
     if (!checkout) return res.status(409).json({ error: 'This vehicle is no longer available. Please refresh the inventory.' });
-
-    try {
-      const order = await razorpayRequest('/orders', {
-        method: 'POST',
-        body: JSON.stringify({
-          amount: checkout.amountMinor,
-          currency: 'INR',
-          receipt: checkoutId,
-          notes: { checkout_id: checkoutId, vehicle_id: checkout.id },
-        }),
-      });
-      await db.run('UPDATE checkout_orders SET razorpay_order_id = ? WHERE id = ?', order.id, checkoutId);
-      return res.status(201).json({
-        checkoutId,
-        orderId: order.id,
-        keyId: process.env.RAZORPAY_KEY_ID,
-        amount: checkout.amountMinor,
-        currency: 'INR',
-        vehicle: { id: checkout.id, make: checkout.make, model: checkout.model, price: checkout.price },
-        customer: { name: input.customerName, email: input.email, phone: input.phone },
-      });
-    } catch (error) {
-      await releaseCheckout(checkoutId, req.user.id);
-      console.error('Could not create payment order:', error.message);
-      return res.status(502).json({ error: 'We could not start payment. Your vehicle reservation has been released; please try again.' });
-    }
-  });
-
-  app.post('/api/checkout/:id/verify', requireAuth, checkoutLimiter, async (req, res) => {
-    const input = validate(paymentVerificationSchema, req.body, res);
-    if (!input) return;
-    const checkout = await db.get(
-      'SELECT * FROM checkout_orders WHERE id = ? AND user_id = ?',
-      req.params.id,
-      req.user.id,
-    );
-    if (!checkout?.razorpay_order_id) return res.status(404).json({ error: 'Checkout not found' });
-    if (!isValidPaymentSignature(checkout.razorpay_order_id, input.paymentId, input.signature)) {
-      return res.status(400).json({ error: 'Payment signature could not be verified' });
-    }
-
-    try {
-      const payment = await razorpayRequest(`/payments/${encodeURIComponent(input.paymentId)}`);
-      const result = await completeCheckout(checkout, payment);
-      if (result.state === 'refunded') {
-        return res.status(409).json({ error: 'The reservation expired, so this payment is being refunded.' });
-      }
-      if (result.state !== 'paid') return res.status(409).json({ error: 'This checkout is no longer available.' });
-      return res.json({ purchase: { id: result.purchaseId, totalAmount: checkout.unit_price }, vehicle: result.vehicle });
-    } catch (error) {
-      console.error('Could not verify checkout payment:', error.message);
-      return res.status(502).json({ error: 'Payment verification is still pending. Please do not pay again; refresh your showroom shortly.' });
-    }
+    const vehicle = toVehicle(await db.get('SELECT * FROM vehicles WHERE id = ?', checkout.id));
+    return res.status(201).json({
+      order: {
+        id: checkoutId,
+        status: 'pending',
+        totalAmount: checkout.price,
+        paymentMethod: checkout.paymentMethod,
+        expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
+      },
+      vehicle,
+    });
   });
 
   app.post('/api/checkout/:id/cancel', requireAuth, async (req, res) => {
@@ -1104,38 +961,9 @@ function createApp({
     return res.status(204).end();
   });
 
-  app.post('/api/payments/razorpay/webhook', async (req, res) => {
-    const signature = req.get('x-razorpay-signature');
-    if (!isValidSignature(req.body, process.env.RAZORPAY_WEBHOOK_SECRET, signature)) {
-      return res.status(400).json({ error: 'Invalid payment webhook signature' });
-    }
-    let event;
-    try {
-      event = JSON.parse(req.body.toString('utf8'));
-    } catch {
-      return res.status(400).json({ error: 'Invalid payment webhook body' });
-    }
-    const payment = event.payload?.payment?.entity;
-    if (event.event === 'payment.captured' && payment?.order_id) {
-      const checkout = await db.get('SELECT * FROM checkout_orders WHERE razorpay_order_id = ?', payment.order_id);
-      if (checkout) {
-        try {
-          const result = await completeCheckout(checkout, payment);
-          if (result.state === 'missing') return res.status(404).end();
-        } catch (error) {
-          console.error('Could not process captured payment webhook:', error.message);
-          return res.status(500).end();
-        }
-      }
-    } else if (event.event === 'payment.failed' && payment?.order_id) {
-      const checkout = await db.get('SELECT id, user_id FROM checkout_orders WHERE razorpay_order_id = ?', payment.order_id);
-      if (checkout) await releaseCheckout(checkout.id, checkout.user_id);
-    }
-    return res.status(200).json({ received: true });
-  });
 
   app.post('/api/vehicles/:id/purchase', requireAuth, (_req, res) => (
-    res.status(410).json({ error: 'Direct purchases are disabled. Use the secure checkout flow.' })
+    res.status(410).json({ error: 'Direct purchases are disabled. Submit an order through the dealership checkout.' })
   ));
 
   app.post('/api/vehicles/:id/restock', requireAuth, requireAdmin, async (req, res) => {
@@ -1229,6 +1057,74 @@ function createApp({
       recentVehicles,
       recentEnquiries,
     });
+  });
+
+  app.get('/api/admin/orders', requireAuth, requireAdmin, async (_req, res) => {
+    await expireCheckoutOrders(db);
+    const orders = await db.all(`
+      SELECT c.id, c.status, c.customer_name, c.email, c.phone, c.delivery_address,
+             c.unit_price, c.payment_method, c.created_at, c.expires_at,
+             v.make, v.model, v.vehicle_year
+      FROM checkout_orders c
+      JOIN vehicles v ON v.id = c.vehicle_id
+      WHERE c.status = 'pending'
+      ORDER BY c.created_at DESC, c.id ASC
+      LIMIT 50
+    `);
+    return res.json({ orders: orders.map((order) => ({
+      id: order.id,
+      status: order.status,
+      customerName: order.customer_name,
+      email: order.email,
+      phone: order.phone,
+      deliveryAddress: order.delivery_address,
+      totalAmount: Number(order.unit_price),
+      paymentMethod: order.payment_method,
+      createdAt: order.created_at,
+      expiresAt: new Date(Number(order.expires_at)).toISOString(),
+      vehicle: {
+        make: order.make,
+        model: order.model,
+        year: order.vehicle_year,
+      },
+    })) });
+  });
+
+  app.patch('/api/admin/orders/:id', requireAuth, requireAdmin, async (req, res) => {
+    const input = validate(dealershipOrderActionSchema, req.body, res);
+    if (!input) return;
+    const outcome = await db.transaction(async (tx) => {
+      const order = await tx.get(
+        "SELECT id, vehicle_id, user_id, unit_price, expires_at FROM checkout_orders WHERE id = ? AND status = 'pending'",
+        req.params.id,
+      );
+      if (!order) return { state: 'not_pending' };
+      if (Number(order.expires_at) <= Date.now()) {
+        const expired = await tx.run("UPDATE checkout_orders SET status = 'expired' WHERE id = ? AND status = 'pending'", order.id);
+        if (!expired.changes) return { state: 'not_pending' };
+        await tx.run('UPDATE vehicles SET quantity = quantity + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?', order.vehicle_id);
+        return { state: 'expired' };
+      }
+      const updated = await tx.run(
+        'UPDATE checkout_orders SET status = ? WHERE id = ? AND status = \'pending\'',
+        input.status,
+        order.id,
+      );
+      if (!updated.changes) return { state: 'not_pending' };
+      if (input.status === 'paid') {
+        const purchaseId = randomUUID();
+        await tx.run(`
+          INSERT INTO purchases (id, vehicle_id, user_id, quantity, unit_price, total_amount, checkout_order_id)
+          VALUES (?, ?, ?, 1, ?, ?, ?)
+        `, purchaseId, order.vehicle_id, order.user_id, order.unit_price, order.unit_price, order.id);
+        return { state: 'paid', purchaseId };
+      }
+      await tx.run('UPDATE vehicles SET quantity = quantity + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?', order.vehicle_id);
+      return { state: 'cancelled' };
+    });
+    if (outcome.state === 'expired') return res.status(409).json({ error: 'This order reservation has expired.' });
+    if (outcome.state === 'not_pending') return res.status(409).json({ error: 'This order is no longer awaiting dealership action.' });
+    return res.json({ status: outcome.state, purchaseId: outcome.purchaseId || null });
   });
 
   app.get('/api/admin/enquiries', requireAuth, requireAdmin, async (req, res) => {

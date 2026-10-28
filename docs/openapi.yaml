@@ -448,12 +448,12 @@ paths:
       summary: Retired direct-purchase endpoint
       responses:
         '410':
-          description: Use the secure payment checkout flow
+          description: Submit an order using the dealership checkout flow
   /vehicles/{id}/checkout:
     parameters:
       - $ref: '#/components/parameters/id'
     post:
-      summary: Reserve one unit and create a Razorpay order
+      summary: Submit a vehicle order request and arrange payment with the dealership
       security:
         - bearerAuth: []
       requestBody:
@@ -462,43 +462,59 @@ paths:
           application/json:
             schema:
               type: object
-              required: [customerName, email, phone, deliveryAddress]
+              required: [customerName, email, phone, deliveryAddress, paymentMethod]
               properties:
                 customerName: { type: string, minLength: 2, maxLength: 80 }
                 email: { type: string, format: email }
                 phone: { type: string, minLength: 7, maxLength: 20 }
                 deliveryAddress: { type: string, minLength: 8, maxLength: 500 }
+                paymentMethod:
+                  type: string
+                  enum: [dealership, callback]
       responses:
         '201':
-          description: Razorpay order and temporary stock reservation
+          description: Pending order request and 24-hour stock reservation; no online charge is made
         '409':
           description: Vehicle is unavailable
-        '503':
-          description: Payment gateway is not configured
-  /checkout/{id}/verify:
+  /checkout/{id}/cancel:
     parameters:
       - $ref: '#/components/parameters/id'
     post:
-      summary: Verify captured payment and complete purchase
+      summary: Cancel a pending vehicle order and release its reservation
       security:
         - bearerAuth: []
+      responses:
+        '204':
+          description: Reservation released
+  /admin/orders:
+    get:
+      summary: List pending dealership order requests (administrator)
+      responses:
+        '200':
+          description: Pending customer orders and contact details
+        '403':
+          description: Administrator access required
+  /admin/orders/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    patch:
+      summary: Confirm an offline payment or cancel an order (administrator)
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [paymentId, signature]
+              required: [status]
               properties:
-                paymentId: { type: string }
-                signature: { type: string }
+                status:
+                  type: string
+                  enum: [paid, cancelled]
       responses:
         '200':
-          description: Payment verified and purchase completed
-        '400':
-          description: Invalid payment signature
+          description: Order updated
         '409':
-          description: Checkout expired or payment is not captured
+          description: Order is no longer pending
   /vehicles/{id}/restock:
     parameters:
       - $ref: '#/components/parameters/id'

@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS checkout_orders (
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'paid', 'cancelled', 'expired', 'refunding', 'refunded')),
   razorpay_order_id TEXT UNIQUE,
   razorpay_payment_id TEXT UNIQUE,
+  payment_method TEXT NOT NULL DEFAULT 'dealership',
   expires_at BIGINT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

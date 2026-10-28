@@ -1,8 +1,8 @@
 const path = require('node:path');
 const { createApp } = require('./app');
-const { createDatabase, createPostgresDatabase } = require('./database');
+const { createDatabase, createPostgresDatabase } = require('./database/database-adapters');
 const { seedAdmin } = require('./seed-admin');
-const { expireCheckoutOrders } = require('./payments');
+const { expireCheckoutOrders } = require('./services/order-reservations');
 
 const port = Number.parseInt(process.env.PORT || '3001', 10);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {

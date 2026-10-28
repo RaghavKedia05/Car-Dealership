@@ -1,7 +1,7 @@
 const { randomUUID } = require('node:crypto');
 const bcrypt = require('bcryptjs');
 const { z } = require('zod');
-const { createDatabase, createPostgresDatabase } = require('./database');
+const { createDatabase, createPostgresDatabase } = require('./database/database-adapters');
 
 const adminSchema = z.object({
   email: z.string().trim().email().max(254).transform((email) => email.toLowerCase()),

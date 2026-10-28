@@ -7,7 +7,7 @@ const { DatabaseSync } = require('node:sqlite');
 const test = require('node:test');
 const request = require('supertest');
 const { createApp } = require('../backend/app');
-const { createDatabase } = require('../backend/database');
+const { createDatabase } = require('../backend/database/database-adapters');
 
 async function createTestContext() {
   const db = createDatabase(':memory:');
@@ -591,7 +591,7 @@ test('currency migration converts inventory and purchase snapshots using the rec
     '002_purchase_records.sql',
     '003_vehicle_specifications.sql',
   ]) {
-    beforeConversion.exec(fs.readFileSync(path.join(__dirname, '..', 'backend', 'migrations', migration), 'utf8'));
+    beforeConversion.exec(fs.readFileSync(path.join(__dirname, '..', 'backend', 'database', 'migrations', 'sqlite', migration), 'utf8'));
   }
   beforeConversion.exec('PRAGMA user_version = 3');
   beforeConversion.prepare(`

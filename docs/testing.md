@@ -9,7 +9,7 @@ npm.cmd run build
 npm.cmd audit --audit-level=high
 ```
 
-`tests/api-endpoints.test.js` and `tests/ai-car-finder.test.js` use isolated SQLite databases. `tests/postgres.test.js` runs core API scenarios on PostgreSQL through PGlite, an embedded PostgreSQL engine. Coverage is reported by Node's experimental built-in coverage option.
+`tests/api-endpoints.test.js` and `tests/ai-car-finder.test.js` use isolated SQLite databases. `tests/postgres-integration.test.js` runs core API scenarios on PostgreSQL through PGlite, an embedded PostgreSQL engine. Coverage is reported by Node's experimental built-in coverage option.
 
 ## Latest recorded verification
 

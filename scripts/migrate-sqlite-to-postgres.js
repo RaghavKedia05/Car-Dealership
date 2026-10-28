@@ -1,6 +1,6 @@
 const path = require('node:path');
 const fs = require('node:fs');
-const { createDatabase, createPostgresDatabase } = require('../backend/database');
+const { createDatabase, createPostgresDatabase } = require('../backend/database/database-adapters');
 
 const tables = ['users', 'vehicles', 'purchases', 'enquiries', 'revoked_tokens'];
 

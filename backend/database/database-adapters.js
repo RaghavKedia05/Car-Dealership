@@ -2,12 +2,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 
-const migrationDirectory = path.join(__dirname, 'migrations');
+const migrationDirectory = path.join(__dirname, 'migrations', 'sqlite');
 const postgresMigration = path.join(__dirname, 'postgres-schema.sql');
-const postgresCheckoutMigration = path.join(__dirname, 'postgres-migrations', '002_checkout_orders.sql');
-const postgresAccountMigration = path.join(__dirname, 'postgres-migrations', '003_customer_accounts.sql');
-const postgresPurchaseLinkMigration = path.join(__dirname, 'postgres-migrations', '004_purchase_checkout_link.sql');
-const postgresRegistrationMigration = path.join(__dirname, 'postgres-migrations', '005_registration_verifications.sql');
+const postgresCheckoutMigration = path.join(__dirname, 'migrations', 'postgres', '002_checkout_orders.sql');
+const postgresAccountMigration = path.join(__dirname, 'migrations', 'postgres', '003_customer_accounts.sql');
+const postgresPurchaseLinkMigration = path.join(__dirname, 'migrations', 'postgres', '004_purchase_checkout_link.sql');
+const postgresRegistrationMigration = path.join(__dirname, 'migrations', 'postgres', '005_registration_verifications.sql');
+const postgresOfflinePaymentMigration = path.join(__dirname, 'migrations', 'postgres', '006_offline_payment_method.sql');
 const migrations = [
   '001_initial_schema.sql',
   '002_purchase_records.sql',
@@ -18,6 +19,7 @@ const migrations = [
   '007_customer_accounts.sql',
   '008_purchase_checkout_link.sql',
   '009_registration_verifications.sql',
+  '010_offline_payment_method.sql',
 ];
 
 function migrate(db) {
@@ -41,7 +43,7 @@ function migrate(db) {
   }
 }
 
-function createDatabase(filename = path.join(__dirname, '..', 'data', 'dealership.db')) {
+function createDatabase(filename = path.join(__dirname, '..', '..', 'data', 'dealership.db')) {
   if (filename !== ':memory:' && !filename.startsWith('file:')) {
     fs.mkdirSync(path.dirname(path.resolve(filename)), { recursive: true });
   }
@@ -138,7 +140,7 @@ function createPostgresDatabase({ connectionString = process.env.DATABASE_URL, p
         `);
         const { rows } = await client.query('SELECT MAX(version) AS version FROM app_schema_migrations');
         let currentVersion = Number(rows[0].version || 0);
-        if (currentVersion > 5) {
+        if (currentVersion > 6) {
           throw new Error('PostgreSQL schema version is newer than this application supports');
         }
         if (currentVersion === 0) {
@@ -161,6 +163,10 @@ function createPostgresDatabase({ connectionString = process.env.DATABASE_URL, p
         if (currentVersion < 5) {
           await client.query(fs.readFileSync(postgresRegistrationMigration, 'utf8'));
           await client.query('INSERT INTO app_schema_migrations (version) VALUES (5)');
+        }
+        if (currentVersion < 6) {
+          await client.query(fs.readFileSync(postgresOfflinePaymentMigration, 'utf8'));
+          await client.query('INSERT INTO app_schema_migrations (version) VALUES (6)');
         }
         await client.query('COMMIT');
       } catch (error) {

@@ -2,14 +2,14 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const request = require('supertest');
 const { createApp } = require('../backend/app');
-const { createDatabase } = require('../backend/database');
+const { createDatabase } = require('../backend/database/database-adapters');
 const {
   buildComparison,
   generateAlternatives,
   parseCriteria,
   parseNaturalQuery,
   recommendVehicles,
-} = require('../backend/ai-car-finder');
+} = require('../backend/services/ai-car-finder');
 
 function vehicle(overrides = {}) {
   return {

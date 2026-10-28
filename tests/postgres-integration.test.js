@@ -3,7 +3,7 @@ const test = require('node:test');
 const request = require('supertest');
 const { PGlite } = require('@electric-sql/pglite');
 const { createApp } = require('../backend/app');
-const { createPostgresDatabase } = require('../backend/database');
+const { createPostgresDatabase } = require('../backend/database/database-adapters');
 
 async function createPostgresContext() {
   const engine = new PGlite();

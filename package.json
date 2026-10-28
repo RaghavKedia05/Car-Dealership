@@ -16,7 +16,7 @@
     "test:coverage": "node --experimental-test-coverage --test",
     "seed:admin": "node backend/seed-admin.js",
     "db:import:postgres": "node scripts/migrate-sqlite-to-postgres.js",
-    "stress": "node scripts/load.js"
+    "stress": "node scripts/http-load-check.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

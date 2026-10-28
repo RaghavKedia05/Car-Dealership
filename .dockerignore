@@ -9,8 +9,9 @@ data
 coverage
 playwright-report
 test-results
-screenshots
+design
+docs
 tests
 scripts
-PROMPTS.md
+CONTRIBUTING.md
 README.md
