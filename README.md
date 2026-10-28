@@ -65,10 +65,9 @@ A full-stack car dealership web app. Customers browse the showroom, describe the
 | Showroom | Smart car finder |
 | --- | --- |
 | ![Showroom with filters](docs/images/showroom.png) | ![Car finder results](docs/images/car-finder.png) |
-| **Car details** | **Admin dashboard** |
-| ![Car detail page](docs/images/vehicle-details.png) | ![Admin dashboard](docs/images/admin-dashboard.png) |
+|**Admin dashboard** |
+| ![Car detail page](docs/images/admin-dashboard.png) | ![Admin dashboard](docs/images/admin-dashboard1.png) |
 
-<p align="center"><img src="docs/images/mobile.png" alt="Mobile home page" width="260" /></p>
 
 ## Tech stack
 
