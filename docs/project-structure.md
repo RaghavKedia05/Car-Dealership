@@ -57,7 +57,7 @@ Car_Dealership/
 | Change vehicle editing | [VehicleEditor.jsx](../src/features/inventory/VehicleEditor.jsx) |
 | Change checkout | [VehicleCheckout.jsx](../src/features/checkout/VehicleCheckout.jsx), [reservation service](../backend/services/order-reservations.js), and API routes |
 | Change AI recommendations | [AICarFinder.jsx](../src/features/ai-car-finder/AICarFinder.jsx) and [AI service](../backend/services/ai-car-finder.js) |
-| Change layout, colors, or responsive behavior | [showroom-theme.css](../src/styles/showroom-theme.css) for the shared theme; [dealership.css](../src/styles/dealership.css) for feature layouts |
+| Change layout, colors, or responsive behavior | [dealership.css](../src/styles/dealership.css) (design tokens at the top, then components and responsive rules) |
 | Change request handling or authorization | [backend/app.js](../backend/app.js), [API reference](api.md), and [OpenAPI](openapi.yaml) |
 | Change persistence/schema | [postgres-database.js](../backend/database/postgres-database.js) and the database-specific migration folders |
 | Apply PostgreSQL migrations | [migrate-postgres.js](../scripts/migrate-postgres.js), via `npm run db:migrate` |

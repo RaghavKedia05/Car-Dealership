@@ -18,7 +18,7 @@ export function PublicHeader({ session, isAdmin, signOut, navigate, pathname, da
     ? [['/admin/dashboard', 'Dashboard'], ['/admin/inventory', 'Inventory'], ['/', 'View site']]
     : session
       ? [['/', 'Home'], ['/showroom', 'Showroom'], ['/account', 'My account'], ['/contact', 'Contact']]
-      : [['/', 'Home'], ['/login?next=showroom', 'Showroom'], ['/contact', 'Contact']];
+      : [['/', 'Home'], ['/showroom', 'Showroom'], ['/contact', 'Contact']];
 
   const isActive = (path) => path === pathname;
   const firstName = session?.user.name?.split(' ')[0] || 'Account';

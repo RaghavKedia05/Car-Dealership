@@ -12,7 +12,7 @@ export function PublicLanding({ api, navigate, isAdmin, session }) {
   const [loadingFeatured, setLoadingFeatured] = useState(true);
   const [featuredError, setFeaturedError] = useState(false);
   const [heroFailed, setHeroFailed] = useState(false);
-  const showroomPath = isAdmin ? '/admin/inventory' : session ? '/showroom' : '/login';
+  const showroomPath = isAdmin ? '/admin/inventory' : '/showroom';
 
   useEffect(() => {
     let active = true;

@@ -168,7 +168,7 @@ export function App() {
       navigate(isAdmin ? '/admin/dashboard' : '/showroom');
       return;
     }
-    if (['/showroom', '/admin/dashboard', '/admin/inventory'].includes(pathname) && !session) {
+    if (['/admin/dashboard', '/admin/inventory'].includes(pathname) && !session) {
       navigate('/login');
       return;
     }
@@ -182,7 +182,7 @@ export function App() {
   }, [pathname, session, isAdmin, navigate]);
 
   useEffect(() => {
-    if (!session || !['/showroom', '/admin/inventory'].includes(pathname)) return undefined;
+    if (!['/showroom', '/admin/inventory'].includes(pathname) || (pathname === '/admin/inventory' && !session)) return undefined;
     const search = new URLSearchParams();
     if (make.trim()) search.set('make', make.trim());
     if (model.trim()) search.set('model', model.trim());
@@ -194,7 +194,8 @@ export function App() {
     search.set('sortBy', sortBy);
     search.set('sortOrder', sortOrder);
     const query = search.toString();
-    const endpoint = `/api/vehicles/search?${query}`;
+    // Visitors browse the public catalogue; signed-in users get the authenticated search.
+    const endpoint = session ? `/api/vehicles/search?${query}` : `/api/public/vehicles?${query}`;
     let active = true;
     const timer = window.setTimeout(async () => {
       setLoading(true);
@@ -251,6 +252,10 @@ export function App() {
   }, [session, navigate]);
 
   function handlePurchase(vehicle) {
+    if (!session) {
+      navigate('/login');
+      return Promise.resolve(null);
+    }
     setBusyId(vehicle.id);
     setError('');
     setNotice('');
@@ -396,7 +401,8 @@ export function App() {
   const vehicleRoute = pathname.match(/^\/vehicles\/([0-9a-f-]+)$/i);
   const customerRoute = pathname === '/showroom' || pathname === '/account' || pathname === '/vehicles';
   const adminRoute = pathname === '/admin/dashboard' || pathname === '/admin/inventory';
-  const awaitingRoleRedirect = (customerRoute && (!session || isAdmin))
+  const awaitingRoleRedirect = (customerRoute && isAdmin)
+    || ((pathname === '/account' || pathname === '/vehicles') && !session)
     || (Boolean(vehicleRoute) && isAdmin)
     || (adminRoute && (!session || !isAdmin))
     || (pathname === '/login' && Boolean(session));
@@ -564,7 +570,23 @@ export function App() {
   } else if (pathname === '/showroom') {
     pageContent = (
       <div className="container page">
-        <AICarFinder session={session} onPurchase={handlePurchase} onUnauthorized={signOut} />
+        {session ? (
+          <AICarFinder session={session} onPurchase={handlePurchase} onUnauthorized={signOut} />
+        ) : (
+          <section className="finder">
+            <div className="finder-head">
+              <div>
+                <p className="eyebrow"><Sparkles size={14} /> Smart car finder</p>
+                <h1 className="page-title">Find the right car, faster</h1>
+                <p>Sign in to describe your ideal car in your own words and get instant matches — or browse every car below.</p>
+              </div>
+              <div className="cta-band-actions">
+                <button className="btn btn-primary" type="button" onClick={() => navigate('/login')}>Sign in</button>
+                <button className="btn btn-outline-light" type="button" onClick={() => { setAuthMode('register'); navigate('/login'); }}>Create account</button>
+              </div>
+            </div>
+          </section>
+        )}
         {inventoryView}
       </div>
     );

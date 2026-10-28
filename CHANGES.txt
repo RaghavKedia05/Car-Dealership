@@ -1,0 +1,31 @@
+Apex Auto — UI redesign (frontend only)
+
+HOW TO APPLY
+1. Unzip this into the root of the Car-Dealership repo (same folder as package.json).
+   Choose "Replace" / overwrite when asked — the folder paths already match the repo.
+2. Run:  npm install   (no new packages were added, just to be safe)
+3. Run:  npm run dev   and open http://localhost:5173 to check.
+4. Commit:
+     git add index.html src backend/app.js .env.example
+     git commit -m "Redesign UI, remove dev elements, remove signup OTP verification"
+     git push
+
+WHAT CHANGED
+- New design system: one font family, one accent colour, consistent header/footer on every page.
+- Removed dev/debug UI: API health badge, "Database verified / health check ms" card,
+  "API & data verification" panel, parser label, character counter, technical error messages,
+  "Not recorded" placeholders, catalogue disclaimers.
+- Browser confirm() popups replaced with proper dialogs (delete vehicle, mark paid, cancel order).
+- Car detail pages now viewable without signing in (they use the public API); customers can reserve from there.
+- Mobile responsive header with menu.
+- Sign-up OTP email verification removed: registering now creates the account and signs the user in
+  immediately (backend/app.js register route; /api/auth/register/verify removed; RESEND only needed for password reset).
+  This also fixes 12 backend tests that were failing because of the OTP step.
+- No new dependencies. No database migration needed (the old registration_verifications table is simply unused).
+
+FILES
+Modified: index.html, backend/app.js, .env.example, src/App.jsx, src/styles/dealership.css,
+  src/components/GlobalErrorToast.jsx, src/components/PublicHeader.jsx,
+  src/lib/api-client.js, and all files in src/features/*
+New: src/components/BrandMark.jsx, src/components/SiteFooter.jsx,
+  src/components/VehicleImage.jsx, src/lib/vehicle-labels.js

@@ -7,7 +7,7 @@ export function SiteFooter({ navigate, session, isAdmin }) {
     event.preventDefault();
     navigate(path);
   }
-  const showroomPath = isAdmin ? '/admin/inventory' : session ? '/showroom' : '/login';
+  const showroomPath = isAdmin ? '/admin/inventory' : '/showroom';
   const link = (path, label) => <li><a href={path} onClick={(event) => follow(event, path)}>{label}</a></li>;
 
   return (
